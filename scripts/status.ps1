@@ -15,4 +15,4 @@ Write-Host ''
 if (Get-ChildItem -LiteralPath $VerifiedDir -Filter "$WikipediaPrefix*.zim" -ErrorAction SilentlyContinue) { Write-Host 'Full Wikipedia: ready' -ForegroundColor Green }
 elseif (Test-Path -LiteralPath $pf) { $s = Get-Content -LiteralPath $pf -Raw | ConvertFrom-Json; Write-Host "Full Wikipedia: $($s.state) - $($s.message)" }
 else { Write-Host 'Full Wikipedia: not started yet (it starts with START-OFFLINE-AI.bat)' }
-if (Get-KitProcess 'wikipedia-download') { Write-Host '  (download window is open)' }
+if ((Get-KitProcess 'wikipedia-download') -and -not (Get-ChildItem -LiteralPath $VerifiedDir -Filter "$WikipediaPrefix*.zim" -ErrorAction SilentlyContinue)) { Write-Host '  (download window is open)' }

@@ -49,7 +49,7 @@ else {
   if (-not (Test-Path -LiteralPath $ps)) { $ps = (Get-Process -Id $PID).Path }
   $dl = Join-Path $PSScriptRoot 'wiki-download.ps1'
   Start-Process -FilePath $ps -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',('"' + $dl + '"')) -WindowStyle Minimized | Out-Null
-  Write-Host '  Not downloaded yet - started downloading it in the background (about 127 GB).' -ForegroundColor Yellow
+  Write-Host ('  Not downloaded yet - started downloading it in the background (about {0}).' -f (Format-GB ($WikipediaGB * 1e9))) -ForegroundColor Yellow
   Write-Host '  A minimised window on the taskbar shows progress. Everything else works meanwhile.'
   Write-Host '  It resumes automatically if interrupted, and appears in the library when finished.'
 }

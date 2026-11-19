@@ -32,7 +32,7 @@ elif kit_pid wiki-download >/dev/null; then
   say "  Still downloading in the background (STATUS-MAC.command shows progress)."
 else
   nohup bash "$MAC_DIR/wiki-download.sh" >> "$LOG_DIR/wikipedia-download-mac.log" 2>&1 < /dev/null &
-  warn "  Not downloaded yet - started downloading it in the background (about 127 GB)."
+  warn "  Not downloaded yet - started downloading it in the background (about $(gb "$(awk -v g="$WIKIPEDIA_GB" 'BEGIN { printf "%.0f", g * 1e9 }')"))."
   say  "  Everything else works meanwhile. STATUS-MAC.command and the chat page show progress."
   say  "  It resumes automatically if interrupted, and appears in the library when finished."
   say  "  Keep the Mac plugged in; it is kept awake while downloading."

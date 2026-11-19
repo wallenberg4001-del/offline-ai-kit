@@ -219,10 +219,33 @@ wikipedia_verified() { # prints the verified Wikipedia file name, if any
 }
 
 # ---------- resumable download ----------
+# Big Kiwix files: download.kiwix.org sends each request to a random mirror and some crawl at
+# 0.2 MB/s (5+ days for Wikipedia). For big files, time a few well-known mirrors and use the fastest.
+# Safe: the SHA256 always comes from download.kiwix.org itself.
+KIWIX_MIRRORS="$KIWIX_BASE https://mirrors.dotsrc.org/kiwix https://ftp.fau.de/kiwix https://mirror.accum.se/mirror/kiwix.org"
+FAST_URL="" FAST_SPEED=0
+pick_fastest_url() { # sets FAST_URL / FAST_SPEED (bytes/s; 0 = not tested)
+  local url="$1" path m r code sp
+  FAST_URL="$url"; FAST_SPEED=0
+  case "$url" in "$KIWIX_BASE"/*) ;; *) return 0 ;; esac
+  path="${url#"$KIWIX_BASE"}"
+  say "  Finding the fastest download server..."
+  for m in $KIWIX_MIRRORS; do
+    r="$(curl -s -L -o /dev/null --connect-timeout 5 --max-time 6 -r 0-300000000 -w '%{http_code} %{speed_download}' "$m$path" 2>/dev/null)"
+    code="${r%% *}"; sp="${r##* }"; sp="${sp%%.*}"
+    [ "$code" = 206 ] || continue
+    case "$sp" in ''|*[!0-9]*) continue ;; esac
+    if [ "$sp" -gt "$FAST_SPEED" ]; then FAST_SPEED="$sp"; FAST_URL="$m$path"; fi
+  done
+  if [ "$FAST_SPEED" -gt 0 ]; then
+    say "  Using $(printf '%s' "$FAST_URL" | awk -F/ '{print $3}') ($(awk -v s="$FAST_SPEED" 'BEGIN { printf "%.1f", s / 1e6 }') MB/s in a quick test)"
+  fi
+}
+
 # download_resumable <url> <out file> <expected bytes or 0> <label> <track wiki progress: yes/no> <max tries>
 download_resumable() {
   local url="$1" out="$2" total="$3" label="$4" track="$5" max="${6:-1000}"
-  local part="$out.part" tries=0 have pid code now last last_t t speed pct mbps line
+  local part="$out.part" tries=0 have pid code now last last_t t speed pct mbps line src slow_since switched
   [ "$total" -gt 0 ] 2>/dev/null || total="$(remote_size "$url")"
   while :; do
     have="$(file_size "$part")"
@@ -230,19 +253,30 @@ download_resumable() {
     if [ "$total" -gt 0 ] && [ "$have" -gt "$total" ]; then rm -f "$part"; have=0; fi
     tries=$((tries + 1))
     if [ "$tries" -gt "$max" ]; then err "Gave up downloading $label after $max tries."; return 1; fi
+    FAST_URL="$url"; FAST_SPEED=0
+    [ "$total" -gt 500000000 ] && pick_fastest_url "$url"
+    src="$FAST_URL"
     curl -sS -L --fail --retry 5 --retry-delay 10 --connect-timeout 30 \
-         --speed-limit 1000 --speed-time 120 -C - -o "$part" "$url" &
+         --speed-limit 1000 --speed-time 120 -C - -o "$part" "$src" &
     pid=$!
-    last="$have"; last_t="$(date +%s)"; speed=0; line=0
+    last="$have"; last_t="$(date +%s)"; speed=0; line=0; slow_since=0; switched=no
     while kill -0 "$pid" 2>/dev/null; do
       sleep 2
       now="$(file_size "$part")"; t="$(date +%s)"
       if [ $((t - last_t)) -ge 5 ]; then speed=$(( (now - last) / (t - last_t) )); last="$now"; last_t="$t"; fi
+      # If the server slows to under a quarter of its tested speed for 3 minutes, pick a server again.
+      if [ "$FAST_SPEED" -gt 0 ] && [ "$speed" -gt 0 ] && [ "$speed" -lt $((FAST_SPEED / 4)) ]; then
+        [ "$slow_since" -eq 0 ] && slow_since="$t"
+      else slow_since=0; fi
+      if [ "$slow_since" -gt 0 ] && [ $((t - slow_since)) -ge 180 ]; then
+        [ -t 1 ] && printf '\n'; warn "  This server got slow - switching to a faster one..."
+        kill "$pid" 2>/dev/null; switched=yes; break
+      fi
       pct=0; [ "$total" -gt 0 ] && pct="$(awk -v a="$now" -v b="$total" 'BEGIN { printf "%.1f", 100 * a / b }')"
       mbps="$(awk -v s="$speed" 'BEGIN { printf "%.1f", s / 1e6 }')"
       local eta=""
       if [ "$speed" -gt 0 ] && [ "$total" -gt 0 ]; then
-        eta="$(awk -v r=$(( (total - now) / speed )) 'BEGIN { printf " - about %dh %02dm left", r / 3600, (r % 3600) / 60 }')"
+        eta="$(awk -v r=$(( (total - now) / speed )) 'BEGIN { if (r >= 86400) printf " - about %d d %d h left", r / 86400, (r % 86400) / 3600; else if (r >= 3600) printf " - about %d h %d min left", r / 3600, (r % 3600) / 60; else printf " - about %d min left", (r + 59) / 60 }')"
       fi
       local status_msg
       status_msg="$(gb "$now") of $(gb "$total") (${pct}%) at ${mbps} MB/s${eta}"
@@ -254,6 +288,7 @@ download_resumable() {
     [ -t 1 ] && printf '\n'
     have="$(file_size "$part")"
     if [ "$code" -eq 0 ] && { [ "$total" -le 0 ] || [ "$have" -eq "$total" ]; }; then break; fi
+    if [ "$switched" = yes ]; then tries=$((tries - 1)); continue; fi
     warn "  Connection problem (curl code $code). Resuming in 30 seconds... (try $tries)"
     [ "$track" = yes ] && write_wiki_status waiting-for-internet "$have" "$total" 0 0 "Waiting for internet, will resume"
     sleep 30
@@ -298,10 +333,15 @@ kit_pid() { # prints the pid if that kit process is running (and really is ours)
   case "$comm" in *"$want"*) printf '%s\n' "$p"; return 0 ;; esac
   return 1
 }
+kill_tree() { # TERM a process's children and grandchildren (e.g. curl inside $(...)), deepest first
+  local c
+  for c in $(pgrep -P "$1" 2>/dev/null); do kill_tree "$c"; kill -TERM "$c" 2>/dev/null || true; done
+}
+
 stop_kit() {
   local p
   if p="$(kit_pid "$1")"; then
-    pkill -TERM -P "$p" 2>/dev/null || true
+    kill_tree "$p"
     kill -TERM "$p" 2>/dev/null || true
     local i=0
     while kill -0 "$p" 2>/dev/null && [ $i -lt 20 ]; do sleep 0.25; i=$((i + 1)); done

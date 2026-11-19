@@ -151,6 +151,9 @@ downloaded during setup. Instead:
 - When it finishes, it checks the file's SHA256 checksum from Kiwix (takes 10–30 minutes on a big file),
   marks it verified, and **restarts the library by itself** so Wikipedia appears. Nothing else to do.
 - Depending on your internet this can take many hours (127 GB at 50 Mbit/s ≈ 6 hours; at 10 Mbit/s ≈ 1.5 days).
+- Before each big download the kit times a few official Kiwix mirrors for a few seconds and uses the fastest one
+  (some mirrors are very slow). If that server slows down a lot later, it switches. The SHA256 check always uses
+  the checksum from download.kiwix.org, so a mirror cannot slip in a bad file.
   Leave the laptop plugged in with sleep turned off until it's done.
 
 ## Step 4 – Stop it

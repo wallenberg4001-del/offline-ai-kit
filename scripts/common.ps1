@@ -254,6 +254,31 @@ function Get-FreeBytes([string]$Path) {
 
 function Format-GB([double]$Bytes) { if ($Bytes -lt 1e9) { return ('{0:N0} MB' -f ($Bytes / 1e6)) }; return ('{0:N1} GB' -f ($Bytes / 1e9)) }
 
+# Big Kiwix files: download.kiwix.org sends each request to a random mirror, and some mirrors
+# crawl at 0.2 MB/s (that would be 5+ days for Wikipedia). For big files we quickly time a few
+# well-known mirrors and use the fastest. Safe: the SHA256 always comes from download.kiwix.org.
+$KiwixMirrors = @($KiwixBase, 'https://mirrors.dotsrc.org/kiwix', 'https://ftp.fau.de/kiwix', 'https://mirror.accum.se/mirror/kiwix.org')
+
+function Select-FastestUrl([string]$Url) {
+  # Returns @{ Url; Speed } for the fastest mirror that has the same file (falls back to Url).
+  if (-not $Url.StartsWith($KiwixBase + '/')) { return @{ Url = $Url; Speed = 0 } }
+  $path = $Url.Substring($KiwixBase.Length)
+  $curl = Get-CurlExe
+  $best = @{ Url = $Url; Speed = 0 }
+  Write-Host '  Finding the fastest download server...'
+  foreach ($m in $KiwixMirrors) {
+    $u = $m + $path
+    $r = & $curl -s -L -o NUL --connect-timeout 5 --max-time 6 -r 0-300000000 -w '%{http_code} %{speed_download}' $u 2>$null
+    $parts = "$r" -split ' '
+    if ($parts.Count -ge 2 -and $parts[0] -eq '206') {
+      $sp = [double]::Parse($parts[1], [Globalization.CultureInfo]::InvariantCulture)
+      if ($sp -gt $best.Speed) { $best = @{ Url = $u; Speed = $sp } }
+    }
+  }
+  if ($best.Speed -gt 0) { Write-Host ('  Using {0} ({1:N1} MB/s in a quick test)' -f ([uri]$best.Url).Host, ($best.Speed / 1e6)) }
+  return $best
+}
+
 function Save-ResumableFile {
   # Downloads Url to OutFile with resume support (curl -C -), retrying on failure.
   # Progress is shown in the window and optionally written to a JSON progress file.
@@ -270,15 +295,24 @@ function Save-ResumableFile {
     if ($ExpectedSize -gt 0 -and $have -gt $ExpectedSize) { Remove-Item -LiteralPath $part -Force; $have = 0 }
     $try++
     if ($try -gt $MaxTries) { throw "Gave up downloading $Label after $MaxTries tries." }
-    $argList = @('-sS','-L','--fail','--retry','5','--retry-delay','10','--connect-timeout','30','--speed-limit','1000','--speed-time','120','-C','-','-o',('"' + $part + '"'),('"' + $Url + '"'))
+    $src = @{ Url = $Url; Speed = 0 }
+    if ($ExpectedSize -gt 500MB) { $src = Select-FastestUrl $Url }
+    $argList = @('-sS','-L','--fail','--retry','5','--retry-delay','10','--connect-timeout','30','--speed-limit','1000','--speed-time','120','-C','-','-o',('"' + $part + '"'),('"' + $src.Url + '"'))
     $p = Start-Process -FilePath $curl -ArgumentList $argList -NoNewWindow -PassThru
-    $lastBytes = $have; $lastTime = Get-Date; $speed = 0
+    $null = $p.Handle   # Windows PowerShell only reports ExitCode if the handle is opened right away
+    $lastBytes = $have; $lastTime = Get-Date; $speed = 0; $slowSince = $null; $switched = $false
     while (-not $p.HasExited) {
       Start-Sleep -Seconds 2
       $now = [int64]0
       if (Test-Path -LiteralPath $part) { $now = (Get-Item -LiteralPath $part).Length }
       $dt = ((Get-Date) - $lastTime).TotalSeconds
       if ($dt -ge 5) { $speed = ($now - $lastBytes) / $dt; $lastBytes = $now; $lastTime = Get-Date }
+      # If the server slows to under a quarter of its tested speed for 3 minutes, pick a server again.
+      if ($src.Speed -gt 0 -and $speed -gt 0 -and $speed -lt ($src.Speed / 4)) { if (-not $slowSince) { $slowSince = Get-Date } } else { $slowSince = $null }
+      if ($slowSince -and ((Get-Date) - $slowSince).TotalSeconds -ge 180) {
+        Write-Host ''; Write-Host '  This server got slow - switching to a faster one...' -ForegroundColor Yellow
+        try { $p.Kill() } catch {}; $p.WaitForExit(); $switched = $true; break
+      }
       Show-DownloadProgress -Label $Label -Have $now -Total $ExpectedSize -Speed $speed -ProgressFile $ProgressFile -State 'downloading'
     }
     $p.WaitForExit()
@@ -286,6 +320,7 @@ function Save-ResumableFile {
     $have = [int64]0
     if (Test-Path -LiteralPath $part) { $have = (Get-Item -LiteralPath $part).Length }
     if ($code -eq 0 -and ($ExpectedSize -le 0 -or $have -eq $ExpectedSize)) { break }
+    if ($switched) { $try--; continue }
     Write-Host ''
     Write-Host "  Connection problem (curl code $code). Will resume in 30 seconds... (try $try)" -ForegroundColor Yellow
     Show-DownloadProgress -Label $Label -Have $have -Total $ExpectedSize -Speed 0 -ProgressFile $ProgressFile -State 'waiting-for-internet'
@@ -302,7 +337,11 @@ function Show-DownloadProgress([string]$Label, [int64]$Have, [int64]$Total, [dou
   $eta = ''
   if ($Speed -gt 0 -and $Total -gt 0) {
     $secs = ($Total - $Have) / $Speed
-    $eta = ' - about ' + ([TimeSpan]::FromSeconds([math]::Min($secs, 8640000))).ToString('d\.hh\:mm') + ' left (d.hh:mm)'
+    $ts = [TimeSpan]::FromSeconds([math]::Min($secs, 8640000))
+    if ($ts.TotalDays -ge 1) { $left = '{0} d {1} h' -f [int][math]::Floor($ts.TotalDays), $ts.Hours }
+    elseif ($ts.TotalHours -ge 1) { $left = '{0} h {1} min' -f $ts.Hours, $ts.Minutes }
+    else { $left = '{0} min' -f [math]::Max(1, [int][math]::Ceiling($ts.TotalMinutes)) }
+    $eta = " - about $left left"
   }
   $status = ('{0} of {1} ({2}%) at {3:N1} MB/s{4}' -f (Format-GB $Have), (Format-GB $Total), $pct, ($Speed/1e6), $eta)
   $pc = [int][math]::Min(100, [math]::Max(0, $pct))

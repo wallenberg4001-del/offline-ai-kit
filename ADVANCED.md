@@ -52,6 +52,8 @@ powershell -ExecutionPolicy Bypass -File scripts\setup.ps1 [options]
   -UseSystemOllama          use your existing Ollama (default port 11434) instead of the kit's own
   -NoStart                  don't start the kit at the end
   -Yes                      accept every default (unattended)
+  -Test                     quick test install (see Test mode)
+  -DetectOnly               only show the hardware check and chosen profile
 ```
 
 Mac (Terminal, from the kit folder):
@@ -61,7 +63,7 @@ bash mac/setup.sh [options]
   --easy  --profile lite|standard|large|largest  --tier essentials|recommended
   --models lite|8|16|24|32   or  --models "qwen3.5:9b,llama3.2:3b"
   --zims id,id  --path /Volumes/SSD/OfflineAI  --skip-wikipedia  --with-wikipedia
-  --use-system-ollama  --no-start  --yes
+  --use-system-ollama  --no-start  --yes  --test  --detect-only
 ```
 
 Example – unattended Mac install to an external SSD with three models and no Wikipedia:

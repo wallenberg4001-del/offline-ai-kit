@@ -9,12 +9,13 @@
 # shellcheck source=lib.sh
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
-TEST=no; TIER=""; MODELS=""; YES=no; EASY=no; HWPROFILE=""; ZIMS=""; INSTALL_PATH=""; SKIPW=no; WITHW=no; SYSOLL=no; NOSTART=no
+DETECT=no; TEST=no; TIER=""; MODELS=""; YES=no; EASY=no; HWPROFILE=""; ZIMS=""; INSTALL_PATH=""; SKIPW=no; WITHW=no; SYSOLL=no; NOSTART=no
 ORIG_ARGS=("$@")
 while [ $# -gt 0 ]; do
   case "$1" in
     --easy) EASY=yes; YES=yes ;;
     --test) TEST=yes ;;
+    --detect-only) DETECT=yes ;;
     --profile) HWPROFILE="${2:-}"; shift ;;
     --tier) TIER="${2:-}"; shift ;;
     --models) MODELS="${2:-}"; shift ;;
@@ -100,6 +101,11 @@ PROFILE="$(profile_for_ram "$RAM")"
 [ -n "$HWPROFILE" ] && PROFILE="$HWPROFILE"
 case "$PROFILE" in lite|standard|large|largest) ;; *) PROFILE=standard ;; esac
 say "Best fit for this Mac: $(profile_label "$PROFILE")"
+if [ "$DETECT" = yes ]; then
+  if pk="$(pick_profile_for_disk "$PROFILE" "$FREE_GB")"; then say "PROFILE: $PROFILE  (Easy install would use: ${pk% *}, Wikipedia: ${pk#* })"
+  else say "PROFILE: $PROFILE  (Easy install: not enough disk space)"; fi
+  exit 0
+fi
 WANT_WIKI=yes; [ "$SKIPW" = yes ] && WANT_WIKI=no
 
 if [ "$TEST_MODE" = yes ]; then
@@ -160,7 +166,7 @@ lib_gb=11.2; [ "$TIER" = essentials ] && lib_gb=3.8; [ "$TIER" = test ] && lib_g
 est="$(awk -v l="$lib_gb" -v m="$(models_gb "$MODEL_LIST")" 'BEGIN { printf "%.0f", 0.5 + l + m + 0.5 }')"
 say ""
 say "Installing: library \"$TIER\", models: $MODEL_LIST"
-if [ "$WANT_WIKI" = yes ]; then say "Setup needs about ${est} GB now; full Wikipedia later needs about ${WIKIPEDIA_GB} GB more."
+if [ "$WANT_WIKI" = yes ]; then say "Setup needs about ${est} GB now; full Wikipedia later needs about $(gb "$(awk -v g="$WIKIPEDIA_GB" 'BEGIN { printf "%.0f", g * 1e9 }')") more."
 else say "Setup needs about ${est} GB. Full Wikipedia is switched off."; fi
 say "Free space on this drive: $(gb "$FREE")"
 if [ "$FREE" -lt $((est * 1000000000)) ]; then err "Not enough free space for setup. Free up space or choose another drive."; pause_exit 1; fi
@@ -232,7 +238,9 @@ for m in $MODEL_LIST; do
   say "  - $m"
   done_ok=no
   for try in 1 2 3 4 5; do
-    if OLLAMA_HOST="127.0.0.1:$OLLAMA_PORT" "$OLL" pull "$m"; then done_ok=yes; break; fi
+    if [ -t 1 ]; then OLLAMA_HOST="127.0.0.1:$OLLAMA_PORT" "$OLL" pull "$m"; rc=$?
+    else OLLAMA_HOST="127.0.0.1:$OLLAMA_PORT" "$OLL" pull "$m" 2>&1 | tr '\r' '\n' | grep -avE 'pulling manifest|[0-9]+% ' ; rc=${PIPESTATUS[0]}; fi   # keep logs readable
+    if [ "$rc" -eq 0 ]; then done_ok=yes; break; fi
     warn "    Retrying in 20 seconds... ($try)"; sleep 20
   done
   if [ "$done_ok" != yes ]; then FAILED="$FAILED $m"; continue; fi
@@ -251,7 +259,9 @@ say ""
 [ "$EASY" = yes ] && make_desktop_shortcut
 if [ -n "$FAILED" ]; then say "RESULT: SETUP FINISHED WITH PROBLEMS"; else say "RESULT: SETUP OK"; fi
 say "NEXT: double-click START-OFFLINE-AI-MAC.command (or 'Offline AI' on the Desktop)."
-if [ "$WANT_WIKI" = yes ]; then
+if [ "$WANT_WIKI" = yes ] && [ "$TEST_MODE" = yes ]; then
+  say "The first start also downloads a small Wikipedia test file in the background (test mode)."
+elif [ "$WANT_WIKI" = yes ]; then
   say "The first start also begins downloading FULL English Wikipedia (~127 GB) in the"
   say "background. Leave the Mac plugged in and online until it finishes (could be many hours)."
 fi

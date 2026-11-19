@@ -14,7 +14,8 @@ param(
   [switch]$WithWikipedia,
   [switch]$UseSystemOllama,
   [switch]$NoStart,
-  [switch]$Test,                  # quick test install (see ADVANCED.md "Test mode")
+  [switch]$Test,
+  [switch]$DetectOnly,            # just show the hardware check and chosen profile, then exit                  # quick test install (see ADVANCED.md "Test mode")
   [switch]$Yes
 )
 . (Join-Path $PSScriptRoot 'common.ps1')
@@ -82,6 +83,12 @@ $hwProfile = Get-HardwareProfile $hw
 if ($HardwareProfile) { $hwProfile = $HardwareProfile.ToLower() }
 if (-not $Profiles.Contains($hwProfile)) { $hwProfile = 'standard' }
 Write-Host ("Best fit for this computer: {0}" -f $Profiles[$hwProfile].Label)
+if ($DetectOnly) {
+  $pk = Select-ProfileForDisk $hwProfile $hw.FreeGB
+  if ($pk) { Write-Host ("PROFILE: {0}  (Easy install would use: {1}, Wikipedia: {2})" -f $hwProfile, $pk.Profile, $pk.Wikipedia) } else { Write-Host "PROFILE: $hwProfile  (Easy install: not enough disk space)" }
+  try { Stop-Transcript | Out-Null } catch {}
+  exit 0
+}
 $wantWiki = -not $SkipWikipedia
 
 if ($TestMode) {
@@ -156,7 +163,7 @@ foreach ($m in $modelList) { $estGB += $m.GB }
 $free = Get-FreeBytes $Kit
 Write-Host ''
 Write-Host ('Installing: library "{0}", models: {1}' -f $tierName, (($modelList | ForEach-Object { $_.Name }) -join ', '))
-if ($wantWiki) { Write-Host ("Setup needs about {0:N0} GB now; full Wikipedia later needs about {2:N0} GB more (total ~{1:N0} GB)." -f $estGB, ($estGB + $WikipediaGB), $WikipediaGB) }
+if ($wantWiki) { Write-Host ("Setup needs about {0:N0} GB now; full Wikipedia later needs about {1} more." -f $estGB, (Format-GB ($WikipediaGB * 1e9))) }
 else { Write-Host ("Setup needs about {0:N0} GB. Full Wikipedia is switched off." -f $estGB) }
 Write-Host ("Free space on this drive: {0}" -f (Format-GB $free))
 if ($free -lt ($estGB * 1e9)) { Write-Host 'Not enough free space for setup. Free up space or choose another drive.' -ForegroundColor Red; exit 1 }
@@ -257,7 +264,8 @@ Write-Host ''
 if ($Easy) { New-DesktopShortcut }
 if ($failed.Count -gt 0) { Write-Host 'RESULT: SETUP FINISHED WITH PROBLEMS' } else { Write-Host 'RESULT: SETUP OK' }
 Write-Host 'NEXT: double-click START-OFFLINE-AI.bat (or the "Offline AI" shortcut on the Desktop).'
-if ($wantWiki) {
+if ($wantWiki -and $TestMode) { Write-Host 'The first start also downloads a small Wikipedia test file in the background (test mode).' }
+elseif ($wantWiki) {
   Write-Host 'The first start also begins downloading FULL English Wikipedia (~127 GB) in the'
   Write-Host 'background. Leave the PC on and online until it finishes (could be many hours).'
 }
