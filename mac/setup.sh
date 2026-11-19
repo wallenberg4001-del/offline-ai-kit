@@ -1,9 +1,9 @@
 #!/bin/bash
-# One-time setup for the Offline AI Kit on an Apple Silicon Mac (needs internet).
+# One-time setup for the Offline AI Kit on a Mac - Apple chip or Intel, detected automatically (needs internet).
 # Safe to run again: finished downloads are skipped, half-finished ones resume.
-#   EASY-INSTALL-MAC.command -> setup.sh --easy   (no questions; picks everything from the hardware)
+#   EASY-INSTALL (Mac).command -> setup.sh --easy   (no questions; picks everything from the hardware)
 #   SETUP-MAC.command        -> setup.sh          (menus)
-# Power-user options (see ADVANCED.md): --profile lite|standard|large|largest  --tier essentials|recommended
+# Power-user options (see ADVANCED.md): --profile lite|standard|large|largest|intel|intel-small  --tier essentials|recommended
 #   --models lite|8|16|24|32|"name,name"  --zims id,id  --path DIR  --skip-wikipedia  --with-wikipedia
 #   --use-system-ollama  --no-start  --yes  --test (quick test install, see ADVANCED.md)
 # shellcheck source=lib.sh
@@ -46,15 +46,23 @@ if [ "$EASY" = yes ]; then say "  Offline AI Kit - EASY INSTALL for Mac (no ques
 say "  Downloads everything once, so it all works later with NO internet."
 say "=================================================="
 say ""
-OS="$(uname -s)"; ARCH="$(uname -m)"
-if [ "$OS" = Darwin ]; then
-  MACVER="$(sw_vers -productVersion 2>/dev/null || echo 0)"
-  if [ "${MACVER%%.*}" -lt 14 ] 2>/dev/null; then err "macOS 14 (Sonoma) or newer is needed (this Mac has $MACVER)."; pause_exit 1; fi
-  if [ "$ARCH" != arm64 ]; then warn "This kit is built for Apple Silicon (M1 or newer). This Mac is $ARCH; it may work but will be slow."; fi
-else
-  warn "Note: this script is for macOS. Continuing anyway (test mode)."
+[ "$(uname -s)" = Darwin ] || warn "Note: this script is for macOS. Continuing anyway (script testing)."
+say "This Mac: $MAC_KIND, macOS $MACOS_VER"
+[ "$TRANSLATED" = yes ] && say "  (This Terminal is running under Rosetta; the kit will still use the Apple-chip programs.)"
+if [ "$MACOS_MAJOR" -lt 12 ]; then
+  err "Sorry - this kit needs macOS 12 (Monterey) or newer, and this Mac has macOS $MACOS_VER."
+  err "If Software Update offers a newer macOS, install it and try again."
+  pause_exit 1
 fi
-KIWIX_ARCH=arm64; [ "$ARCH" = x86_64 ] && KIWIX_ARCH=x86_64
+if [ "$OLLAMA_CHANNEL" = none ]; then
+  warn "Note: the AI chat needs macOS 13 (Ventura) or newer. This Mac has macOS $MACOS_VER,"
+  warn "so only the Offline Library (Wikipedia, medicine, survival guides...) will be installed."
+  warn "That part works fully. If you update macOS later, run this installer again to add the AI."
+elif [ "$OLLAMA_CHANNEL" = pinned ]; then
+  say "  macOS 13: using Ollama $OLLAMA_PIN_VERSION (the last version made for macOS 13)."
+fi
+[ "$MAC_ARCH" = x86_64 ] && [ "$AI_AVAILABLE" = yes ] && warn "Intel Mac: everything works, but AI answers are slower (the AI runs on the processor)."
+KIWIX_ARCH="$MAC_ARCH"
 
 # ---------- 1. Install folder ----------
 TARGET="$KIT"
@@ -73,8 +81,8 @@ if [ "$TARGET" != "$KIT" ]; then
 fi
 if [ "$TARGET" != "$KIT" ]; then
   say "Copying the kit files to $TARGET ..."
-  for item in mac scripts www SETUP-MAC.command EASY-INSTALL-MAC.command START-OFFLINE-AI-MAC.command STOP-OFFLINE-AI-MAC.command \
-              STATUS-MAC.command SETUP.bat EASY-INSTALL.bat START-OFFLINE-AI.bat STOP-OFFLINE-AI.bat STATUS.bat README.md \
+  for item in mac scripts www SETUP-MAC.command "EASY-INSTALL (Mac).command" START-OFFLINE-AI-MAC.command STOP-OFFLINE-AI-MAC.command \
+              STATUS-MAC.command SETUP.bat "EASY-INSTALL (Windows).bat" START-OFFLINE-AI.bat STOP-OFFLINE-AI.bat STATUS.bat README.md \
               START-HERE.txt ADVANCED.md README-OUTAGE.txt kit-settings.example.ini kit-settings.ini LICENSE; do
     [ -e "$KIT/$item" ] && cp -R "$KIT/$item" "$TARGET/"
   done
@@ -99,23 +107,24 @@ say ""
 say "This Mac: ${RAM} GB memory, ${FREE_GB} GB free on this drive."
 PROFILE="$(profile_for_ram "$RAM")"
 [ -n "$HWPROFILE" ] && PROFILE="$HWPROFILE"
-case "$PROFILE" in lite|standard|large|largest) ;; *) PROFILE=standard ;; esac
+case "$PROFILE" in lite|standard|large|largest|intel|intel-small) ;; *) PROFILE="$(profile_for_ram "$RAM")" ;; esac
 say "Best fit for this Mac: $(profile_label "$PROFILE")"
 if [ "$DETECT" = yes ]; then
   if pk="$(pick_profile_for_disk "$PROFILE" "$FREE_GB")"; then say "PROFILE: $PROFILE  (Easy install would use: ${pk% *}, Wikipedia: ${pk#* })"
   else say "PROFILE: $PROFILE  (Easy install: not enough disk space)"; fi
   exit 0
 fi
+is_yes "${OFFLINE_AI_SKIP_WIKIPEDIA:-no}" && SKIPW=yes
 WANT_WIKI=yes; [ "$SKIPW" = yes ] && WANT_WIKI=no
 
 if [ "$TEST_MODE" = yes ]; then
-  TIER="test"; ZIMS="knots,water"; MODEL_LIST="llama3.2:3b"
+  TIER="test"; ZIMS="knots,water"; MODEL_LIST="llama3.2:3b"; [ "$AI_AVAILABLE" = yes ] || MODEL_LIST=""
 elif [ "$EASY" = yes ]; then
   if ! pick="$(pick_profile_for_disk "$PROFILE" "$FREE_GB")"; then
     err ""
     err "There is not enough free space on this drive. The smallest version needs about $(profile_need_gb lite) GB"
     err "and this drive has ${FREE_GB} GB free. Please delete some files (or plug in a bigger drive"
-    err "and copy this folder onto it), then double-click EASY-INSTALL-MAC again."
+    err "and copy this folder onto it), then double-click EASY-INSTALL (Mac) again."
     pause_exit 1
   fi
   NEWP="${pick% *}"; PW="${pick#* }"
@@ -139,6 +148,15 @@ else
   [ -n "$TIER" ] || [ -n "$ZIMS" ] || TIER="$(ask 'Type 1 or 2:' "$DEF_T")"
   case "$TIER" in 1|essentials) TIER=essentials ;; *) TIER=recommended ;; esac
 
+  if [ "$AI_AVAILABLE" != yes ]; then MODEL_LIST=""
+  elif [ "$MAC_ARCH" = x86_64 ]; then
+    REC="$(intel_models)"
+    say ""
+    say "Which AI models? (Intel Mac: small models only - bigger ones would be far too slow)"
+    say "  Recommended for this Mac: $REC"
+    [ -n "$MODELS" ] || MODELS="$(ask 'Press Return for these, or type model names separated by commas:' "$(printf '%s' "$REC" | tr ' ' ',')")"
+    MODEL_LIST="$(printf '%s' "$MODELS" | tr ',' ' ')"
+  else
   case "$PROFILE" in lite) REC=lite ;; standard) REC=16 ;; large) REC=24 ;; *) REC=32 ;; esac
   say ""
   say "Which AI models?"
@@ -154,6 +172,8 @@ else
     *) MODEL_LIST="$(models_for_set "$REC")" ;;
   esac
   case "$MODELS" in 16|24|32) [ "$RAM" -gt 0 ] && [ "$MODELS" -gt "$RAM" ] && warn "Note: the biggest models in that set may be too slow on ${RAM} GB. Use the smaller ones if so." ;; esac
+  MODEL_LIST="$(compat_models "$MODEL_LIST")"
+  fi
   if [ "$SKIPW" != yes ] && [ "$WITHW" != yes ] && { [ "$PROFILE" = lite ] || [ "$FREE_GB" -lt 187 ]; }; then
     DEF_W=Y; [ "$FREE_GB" -lt 167 ] && DEF_W=N
     case "$(ask 'Also download full English Wikipedia later (127 GB)? (Y/N)' "$DEF_W")" in [Yy]*) WANT_WIKI=yes ;; *) WANT_WIKI=no ;; esac
@@ -165,7 +185,7 @@ load_settings
 lib_gb=11.2; [ "$TIER" = essentials ] && lib_gb=3.8; [ "$TIER" = test ] && lib_gb=0.1
 est="$(awk -v l="$lib_gb" -v m="$(models_gb "$MODEL_LIST")" 'BEGIN { printf "%.0f", 0.5 + l + m + 0.5 }')"
 say ""
-say "Installing: library \"$TIER\", models: $MODEL_LIST"
+say "Installing: library \"$TIER\", models: ${MODEL_LIST:-none (AI needs macOS 13+)}"
 if [ "$WANT_WIKI" = yes ]; then say "Setup needs about ${est} GB now; full Wikipedia later needs about $(gb "$(awk -v g="$WIKIPEDIA_GB" 'BEGIN { printf "%.0f", g * 1e9 }')") more."
 else say "Setup needs about ${est} GB. Full Wikipedia is switched off."; fi
 say "Free space on this drive: $(gb "$FREE")"
@@ -196,15 +216,19 @@ else
 fi
 
 # ---------- 4. Ollama ----------
-say "[2/4] AI program (Ollama for macOS, portable, ~190 MB)..."
+say "[2/4] AI program (Ollama for macOS, portable)..."
 if [ "$USE_SYSTEM_OLLAMA" = yes ]; then say "  Using your own Ollama on port $OLLAMA_PORT (USE_SYSTEM_OLLAMA) - not downloading one."
+elif [ "$AI_AVAILABLE" != yes ]; then warn "  Skipped: needs macOS 13 (Ventura) or newer (this Mac has $MACOS_VER)."
 elif ollama_bin >/dev/null; then ok "  Already installed."
 else
-  base="https://github.com/ollama/ollama/releases/latest/download/"
+  # ollama-darwin.tgz is one download for both kinds of Mac (it contains Apple-chip and Intel programs).
   asset="ollama-darwin.tgz"
+  if [ "$OLLAMA_CHANNEL" = pinned ]; then base="https://github.com/ollama/ollama/releases/download/$OLLAMA_PIN_VERSION/"
+  else base="https://github.com/ollama/ollama/releases/latest/download/"; fi
   download_resumable "$base$asset" "$RUNTIME/$asset" 0 "$asset" no 20 || pause_exit 1
   want="$(curl_text "${base}sha256sum.txt" | tr -d '\r' | awk -v a="$asset" '$2 == a || $2 == "./" a { print $1 }')"
   if [ -z "$want" ]; then err "Could not read the Ollama checksum list."; pause_exit 1; fi
+  if [ "$OLLAMA_CHANNEL" = pinned ] && [ "$want" != "$OLLAMA_PIN_SHA256" ]; then rm -f "$RUNTIME/$asset"; err "The Ollama $OLLAMA_PIN_VERSION checksum online does not match the one built into this kit. Not installing it."; pause_exit 1; fi
   if [ "$(sha256_of "$RUNTIME/$asset")" != "$want" ]; then rm -f "$RUNTIME/$asset"; err "Ollama download was damaged (checksum mismatch). Run setup again."; pause_exit 1; fi
   tar -xzf "$RUNTIME/$asset" -C "$OLLAMA_DIR" 2>/dev/null || tar -xzf "$RUNTIME/$asset" -C "$OLLAMA_DIR"
   rm -f "$RUNTIME/$asset"
@@ -228,6 +252,8 @@ done <<< "$ZIM_CATALOG"
 
 # ---------- 6. Models ----------
 say "[4/4] AI models..."
+if [ -z "$MODEL_LIST" ]; then say "  None to install."
+else
 start_ollama || { err "The kit AI server would not start; see logs/ollama-mac.log"; pause_exit 1; }
 OLL="$(ollama_bin)" || true
 if [ "$USE_SYSTEM_OLLAMA" = yes ]; then OLL="$(command -v ollama || true)"; [ -n "$OLL" ] || { err "USE_SYSTEM_OLLAMA is on but the ollama command was not found."; pause_exit 1; }; fi
@@ -247,6 +273,7 @@ for m in $MODEL_LIST; do
   reply="$(OLLAMA_HOST="127.0.0.1:$OLLAMA_PORT" "$OLL" run "$m" 'Reply with just the word OK.' 2>/dev/null | tr '\n' ' ')"
   say "    Test answer: ${reply:0:60}"
 done
+fi
 
 say ""
 if [ -n "$FAILED" ]; then

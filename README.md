@@ -1,8 +1,68 @@
-# Offline AI Kit (Windows and Apple Silicon Mac)
+# Offline AI Kit
 
-> **Not techy?** Double-click **EASY-INSTALL** (`EASY-INSTALL.bat` on Windows, `EASY-INSTALL-MAC.command` on Mac) and read `START-HERE.txt`.
-> **Want choices?** Use **SETUP** (`SETUP.bat` / `SETUP-MAC.command`) – the steps below.
-> **Power user?** See [ADVANCED.md](ADVANCED.md) (options, `kit-settings.ini`, ports, your own Ollama).
+A chat assistant (AI) and a big reference library – including all of Wikipedia – that work on your own
+computer with **no internet**. Set it up once, then it works during power cuts, storms, or anywhere with no signal.
+
+## 👉 Which one do I need?
+
+There is **one file to double-click**. Pick the line that matches your computer:
+
+| Your computer | Double-click this file | Notes |
+|---|---|---|
+| 🪟 **Windows PC** | **`EASY-INSTALL (Windows).bat`** | |
+| 🍎 **Mac with an Apple chip** (M1, M2, M3, M4, M5) | **`EASY-INSTALL (Mac).command`** | Fastest Mac version. |
+| 🍏 **Older Mac with an Intel chip** | **the same `EASY-INSTALL (Mac).command`** | It works out which Mac you have by itself. The AI answers more slowly on Intel Macs. |
+
+**How do I check which Mac I have?** Click the **Apple menu** () in the top-left corner, then **About This Mac**.
+- If you see **Chip: Apple M1** (or M2, M3, M4, M5), you have an **Apple chip**.
+- If you see **Processor: … Intel …**, you have an **Intel Mac**.
+
+**How do I check if I have a PC?** If your computer runs **Windows** (it has a Start button with the Windows logo),
+it is a PC. Use the Windows file.
+
+## How to get it
+
+1. On this page, click the green **Code** button, then **Download ZIP**.
+2. **Unzip it.**
+   - **Windows:** right-click the ZIP, choose **Properties**, tick **Unblock**, click **OK**.
+     Then right-click the ZIP again and choose **Extract All…**
+   - **Mac:** Safari unzips it for you into **Downloads**. (If not, double-click the ZIP.)
+3. Open the folder and **double-click the file for your computer** (see the table above).
+   - Windows may say **"Windows protected your PC"**. Click **More info**, then **Run anyway**.
+   - A Mac may say it **"cannot be opened"**. **Right-click** the file (or hold Control and click), choose **Open**, then **Open** again.
+     More help is in [`START-HERE.txt`](START-HERE.txt).
+
+## What happens next, and how long it takes
+
+- A window opens and shows what it is doing. **There are no questions to answer.**
+- It looks at your computer and picks the right size of everything by itself.
+- It downloads the programs, the library and the AI. **This usually takes 1–3 hours.** Keep the computer plugged in and online.
+- When it is done, your web browser opens with the **chat** and the **library**.
+- An **Offline AI** shortcut appears on your Desktop. Double-click it next time.
+- **Full Wikipedia** then downloads quietly in the background. That can take from about an hour to a day or two,
+  depending on your internet. Everything else works while it downloads.
+- If the internet drops, double-click the same file again. It carries on where it stopped.
+
+## What you need
+
+- **Windows PC:** Windows 10 or 11 (64-bit). An NVIDIA graphics card makes the AI faster, but is not needed.
+- **Mac with an Apple chip:** macOS 13 (Ventura) or newer. (macOS 14 or newer gets the newest AI program. On macOS 12, only the library is installed.)
+- **Intel Mac:** macOS 13 (Ventura) or newer for the AI. On macOS 12 (Monterey), only the library is installed.
+- **Memory:** 8 GB works. 16 GB or more is better.
+- **Internet:** only once, for setup.
+- **Free disk space** – it picks a size that fits, and skips Wikipedia if there isn't room:
+
+| Version (picked for you) | Library | AI models | Space needed | With full Wikipedia |
+|---|---|---|---|---|
+| Small computers (LITE) | Essentials (~4 GB) | 2 small models | ~10–12 GB | ~150 GB |
+| Intel Mac | Recommended (~11 GB) | 2–3 small models | ~20 GB | ~160 GB |
+| Most computers (STANDARD) | Recommended (~11 GB) | 4–5 models | ~28 GB | ~170 GB |
+| Strong computers (FULL / LARGE) | Recommended (~11 GB) | 7 models | ~47–50 GB | ~190 GB |
+| Big Macs, 32 GB+ (LARGEST) | Recommended (~11 GB) | 8 models | ~66 GB | ~205 GB |
+
+An external drive (USB SSD) is fine. Copy the unzipped folder onto it first, then double-click from there.
+
+---
 
 ## What is this?
 
@@ -34,22 +94,10 @@
 Everything is free and comes from the official sources (Kiwix, Ollama). Every file is checked against its official
 fingerprint (checksum) so nothing is damaged or tampered with.
 
-## What computer do I need?
+## Want choices, or more control?
 
-| | Windows | Mac |
-|---|---|---|
-| **System** | Windows 10 (1803+) or 11, 64-bit | Apple Silicon (M1 or newer), macOS 14 Sonoma or newer |
-| **Memory** | 8 GB works (LITE); 16 GB+ recommended | 8 GB works (LITE); 16 GB+ recommended |
-| **Graphics** | Any. An NVIDIA card makes the AI much faster (12 GB like an RTX 5070 Ti laptop = FULL version) | Built in – Apple Silicon is great at this |
-| **Free space** | ~190 GB for everything (an external SSD is fine). Less space? It installs a smaller version and skips Wikipedia. | same |
-| **Internet** | Only once, for setup (a few hours, plus overnight for Wikipedia) | same |
-
-## How easy is it?
-
-**Very.** Double-click **EASY-INSTALL**, wait, and your browser opens with the chat and the library.
-No questions, no accounts, no sign-ups, nothing to configure. It looks at your computer and picks the right version
-by itself, and puts an **Offline AI** shortcut on your Desktop for next time. Grandparent-friendly instructions are in
-[`START-HERE.txt`](START-HERE.txt).
+- **Want to choose for yourself?** Use **SETUP** instead (`SETUP.bat` on Windows, `SETUP-MAC.command` on Mac). It asks a few simple questions.
+- **Power user?** See [ADVANCED.md](ADVANCED.md) for options, `kit-settings.ini`, ports, and using your own Ollama.
 
 ## FAQ
 
@@ -60,7 +108,13 @@ by itself, and puts an **Offline AI** shortcut on your Desktop for next time. Gr
 **Is my data private?** Yes. Everything runs on your computer and only listens to your own computer (`127.0.0.1`), not the network.
 
 **How long does setup take?** Usually 1–3 hours for the main part (depends on your internet), then Wikipedia keeps
-downloading in the background – often overnight or a day or two on slower connections. Everything else works meanwhile.
+downloading in the background – from about an hour to a day or two. Everything else works meanwhile.
+
+**I have an older Intel Mac. Will it work?** Yes, with macOS 13 (Ventura) or newer. The AI runs on the Mac's processor,
+so answers are slower – often 10 to 60 seconds. The library is just as fast as on any other computer.
+On macOS 12 (Monterey) you get the library only. Older than macOS 12 is not supported.
+
+**Which file do I double-click on a Mac?** Always `EASY-INSTALL (Mac).command`. It works on Apple-chip and Intel Macs.
 
 **Will it slow down or change my computer?** No. Nothing is installed into Windows or macOS; it all lives in one folder.
 It only uses the computer while it's running, and STOP turns it off. To remove it, delete the folder.
@@ -68,7 +122,7 @@ It only uses the computer while it's running, and STOP turns it off. To remove i
 **Is the AI always right?** No – it can make mistakes. For medical or safety questions, also check the library, and call
 emergency services when you can. The kit is a helper, not a doctor.
 
-**Can I put it on a USB/external drive?** Yes, and the same drive can be used on both Windows and Mac.
+**Can I put it on a USB/external drive?** Yes, and the same drive can be used on Windows, Apple-chip Macs and Intel Macs.
 
 **Do I need a gaming PC?** No. Lighter computers get the LITE version automatically (smaller library, two small AI models).
 
@@ -82,7 +136,8 @@ See `START-HERE.txt` for exactly what to click.
 > ⚠️ The AI can be wrong. For anything medical, check the Offline Library (WikiMed,
 > Wikipedia Medicine) too, and call emergency services when you can. This is not a doctor.
 
-**Windows:** follow Steps 1–4 below. **Mac (M1 or newer):** jump to [Mac (Apple Silicon)](#mac-apple-silicon).
+**The rest of this page is the detailed guide for SETUP (the version with questions).**
+**Windows:** Steps 1–4 below. **Mac (Apple chip or Intel):** jump to [Mac](#mac-apple-chip-or-intel).
 
 ---
 
@@ -164,20 +219,26 @@ Double-click **`STOP-OFFLINE-AI.bat`**. (A half-finished Wikipedia download is k
 
 ---
 
-## Mac (Apple Silicon)
+## Mac (Apple chip or Intel)
 
 Same kit, same library, same chat page – just different double-click files ending in `.command`.
+The Mac scripts work out by themselves whether your Mac has an Apple chip or an Intel chip, and download the right programs.
 
 ### What you need (Mac)
 
-- A Mac with **Apple Silicon (M1, M2, M3, M4 or newer)**.
-- **macOS 14 Sonoma or newer** (Ollama needs it).
-- **~190 GB free** for everything (setup ~10–65 GB depending on choices, plus ~127 GB for full Wikipedia).
+| | Mac with Apple chip (M1–M5) | Intel Mac |
+|---|---|---|
+| **macOS** | 13 Ventura or newer (14 Sonoma+ gets the newest Ollama); on 12 Monterey, library only | 13 Ventura or newer for the AI; on 12 Monterey, library only |
+| **AI speed** | Fast – uses the Apple GPU | Slower – runs on the processor (often 10–60 s per answer) |
+| **Models** | By memory, see the table below | `llama3.2:3b`, `medgemma:4b`, plus `phi4-mini` with 16 GB+ |
+| **Library** | Recommended (Essentials if under 16 GB) | Recommended (Essentials if the disk is tight) |
+
+- **~190 GB free** for everything on Apple-chip Macs (setup ~10–65 GB, plus ~127 GB for full Wikipedia); ~160 GB on Intel Macs.
   An external SSD is fine.
 - Internet for the first setup.
 
-The Mac's memory (RAM) is shared between the computer and the AI, so setup checks how much
-your Mac has ( → About This Mac) and suggests a model set:
+On Apple-chip Macs the memory (RAM) is shared between the computer and the AI, so setup checks how much
+your Mac has ( → About This Mac) and picks a model set:
 
 | Your Mac's memory | Set | Models | Download |
 |---|---|---|---|
@@ -185,6 +246,9 @@ your Mac has ( → About This Mac) and suggests a model set:
 | 16 GB | Medium | Small + `qwen3.5:9b`, `gemma3:4b` | ~18 GB |
 | 24 GB or more | Large | Medium + `gemma3:12b`, `qwen3:14b` | ~35 GB |
 | 32 GB or more (optional) | Largest | Large + `qwen3:30b` (18.6 GB) | ~54 GB |
+
+On macOS 13 the kit uses Ollama v0.12.9 (the last one made for macOS 13; its checksum is built into the kit),
+and swaps `qwen3.5:9b` for `qwen3:8b`, which that version can run.
 
 ### Step 1 – Get the kit
 
@@ -198,6 +262,7 @@ The easiest way (works every time, no security pop-ups):
 
 1. Open **Terminal** (press ⌘-Space, type *Terminal*, press Return).
 2. Type `bash ` (with a space after it), then **drag `SETUP-MAC.command` from the folder into the Terminal window**, and press **Return**.
+   (For no questions at all, drag `EASY-INSTALL (Mac).command` instead.)
 3. Answer the questions (Return picks the suggested choice): folder, library tier, model set.
 
 Setup downloads the programs (Kiwix for macOS and Ollama for macOS from their official sites),
@@ -231,8 +296,11 @@ by itself so Wikipedia appears. Progress shows in `STATUS-MAC.command` and at th
 - Use **Chrome, Safari or Firefox**; if Safari won't connect, try Chrome or Firefox.
 - The kit's Ollama runs on port 11435 with its models in `ollama-models/` and its settings in `home/`;
   an Ollama app you installed yourself (port 11434) is never touched.
-- One kit folder on an external drive can be used from **both** Windows and Mac: the library and models are
-  shared; each system keeps its own programs in `runtime/`.
+- **Apple chip or Intel** is read from the hardware (`sysctl hw.optional.arm64`), so an Apple-chip Mac whose Terminal
+  runs under Rosetta still gets the fast Apple-chip programs. Kiwix comes from `kiwix-tools_macos-arm64` or
+  `kiwix-tools_macos-x86_64`; Ollama's `ollama-darwin.tgz` contains both.
+- One kit folder on an external drive can be used from Windows, Apple-chip Macs **and** Intel Macs: the library and
+  models are shared; each kind of computer keeps its own programs in `runtime/`.
 
 ---
 

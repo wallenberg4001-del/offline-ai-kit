@@ -1,5 +1,5 @@
 #!/bin/bash
-# Shared settings and helpers for the Offline AI Kit (macOS, Apple Silicon).
+# Shared settings and helpers for the Offline AI Kit (macOS: Apple Silicon and Intel Macs).
 # Uses only tools built into macOS: bash 3.2, curl, shasum, tar, df, sysctl, open, caffeinate.
 # Everything lives inside the kit folder; nothing is installed system-wide.
 # shellcheck disable=SC2034  # variables are used by the scripts that source this file
@@ -9,8 +9,7 @@ set -u
 MAC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KIT="$(cd "$MAC_DIR/.." && pwd)"
 RUNTIME="$KIT/runtime"
-OLLAMA_DIR="$RUNTIME/mac-ollama"      # Windows uses runtime/ollama, so one drive can hold both
-KIWIX_DIR="$RUNTIME/mac-kiwix"
+SETTINGS_FILE="$KIT/kit-settings.ini"   # optional, for power users (see ADVANCED.md)
 LIBRARY="$KIT/library"                # shared with Windows (same .zim files)
 CHECKSUMS="$LIBRARY/checksums"
 VERIFIED_DIR="$CHECKSUMS/VERIFIED"
@@ -21,8 +20,6 @@ WWW_DIR="$KIT/www"
 CONFIG_FILE="$KIT/kit-config-mac.txt"
 WIKI_PROGRESS="$LOG_DIR/wikipedia-progress.json"
 WIKI_STATUS_JS="$WWW_DIR/wiki-status.js"
-
-SETTINGS_FILE="$KIT/kit-settings.ini"   # optional, for power users (see ADVANCED.md)
 
 setting() { # setting <KEY> <default>
   local v=""
@@ -45,6 +42,42 @@ load_settings() {
   if [ "$USE_SYSTEM_OLLAMA" = yes ]; then OLLAMA_PORT="$(setting OLLAMA_PORT 11434)"; else OLLAMA_PORT="$(setting OLLAMA_PORT 11435)"; fi
 }
 load_settings                         # kit Ollama defaults to 11435, never the normal 11434
+
+# ---------- Which Mac is this? (Apple chip or Intel, and the macOS version) ----------
+# hw.optional.arm64 is 1 on every Apple-chip Mac, even when this script runs under Rosetta
+# (then uname -m says x86_64 and sysctl.proc_translated is 1). Intel Macs do not have it.
+# For testing: OFFLINE_AI_MAC_ARCH=arm64|x86_64 and OFFLINE_AI_MACOS=13.6 (env), or MAC_ARCH in kit-settings.ini.
+OLLAMA_PIN_VERSION="v0.12.9"          # last Ollama that runs on macOS 13 Ventura (v0.12.10+ needs macOS 14)
+OLLAMA_PIN_SHA256="a3bd64569cb945133dd714f3568989f6bcd4d988a3ba47d2c0dc644770547f17"   # its ollama-darwin.tgz
+detect_mac() {
+  HW_ARCH=x86_64
+  if [ "$(sysctl -n hw.optional.arm64 2>/dev/null)" = 1 ]; then HW_ARCH=arm64
+  elif [ "$(uname -s)" != Darwin ]; then case "$(uname -m)" in arm64|aarch64) HW_ARCH=arm64 ;; esac
+  fi
+  TRANSLATED=no; [ "$(sysctl -n sysctl.proc_translated 2>/dev/null)" = 1 ] && TRANSLATED=yes
+  MAC_ARCH="${OFFLINE_AI_MAC_ARCH:-$(setting MAC_ARCH "$HW_ARCH")}"
+  case "$MAC_ARCH" in arm64|x86_64) ;; *) MAC_ARCH="$HW_ARCH" ;; esac
+  if [ -n "${OFFLINE_AI_MACOS:-}" ]; then MACOS_VER="$OFFLINE_AI_MACOS"
+  elif [ "$(uname -s)" = Darwin ]; then MACOS_VER="$(sw_vers -productVersion 2>/dev/null || echo 0)"
+  else MACOS_VER="99.0"; fi           # not a Mac (script testing on Linux)
+  MACOS_MAJOR="${MACOS_VER%%.*}"
+  case "$MACOS_MAJOR" in ''|*[!0-9]*) MACOS_MAJOR=0 ;; esac
+  # Run the programs as the chosen type even if this Terminal is running under Rosetta.
+  ARCH_CMD=""
+  if [ "$HW_ARCH" = arm64 ] && [ "$MAC_ARCH" = x86_64 ]; then ARCH_CMD="arch -x86_64"
+  elif [ "$HW_ARCH" = arm64 ] && [ "$TRANSLATED" = yes ]; then ARCH_CMD="arch -arm64"; fi
+  # Which Ollama this macOS can run: current (14+), the last one for 13, or none (12 and older).
+  if [ "$MACOS_MAJOR" -ge 14 ]; then OLLAMA_CHANNEL=current
+  elif [ "$MACOS_MAJOR" -eq 13 ]; then OLLAMA_CHANNEL=pinned
+  else OLLAMA_CHANNEL=none; fi
+  if [ "$MAC_ARCH" = x86_64 ]; then MAC_KIND="Intel Mac"; else MAC_KIND="Mac with Apple chip"; fi
+}
+detect_mac
+# Separate program folders per build, so a kit on an external drive works on both kinds of Mac.
+if [ "$MAC_ARCH" = x86_64 ]; then KIWIX_DIR="$RUNTIME/mac-kiwix-intel"; else KIWIX_DIR="$RUNTIME/mac-kiwix"; fi
+if [ "$OLLAMA_CHANNEL" = pinned ]; then OLLAMA_DIR="$RUNTIME/mac-ollama-$OLLAMA_PIN_VERSION"; else OLLAMA_DIR="$RUNTIME/mac-ollama"; fi
+                                      # (Windows uses runtime/ollama, so one drive can hold all of them)
+AI_AVAILABLE=yes; [ "$OLLAMA_CHANNEL" = none ] && AI_AVAILABLE=no
 KIWIX_BASE="https://download.kiwix.org"
 WIKIPEDIA_PREFIX="wikipedia_en_all_maxi"
 WARN_FREE_BYTES=140000000000          # warn when under ~140 GB free
@@ -72,7 +105,8 @@ qwen3.5:9b|6.6|16|Best all-rounder
 gemma3:4b|3.3|16|Light, can read photos
 gemma3:12b|8.2|24|Stronger answers, can read photos
 qwen3:14b|9.3|24|Strong reasoning
-qwen3:30b|18.6|32|Biggest; fast for its size (mixture-of-experts)"
+qwen3:30b|18.6|32|Biggest; fast for its size (mixture-of-experts)
+qwen3:8b|5.2|99|All-rounder for macOS 13 (stands in for qwen3.5:9b)"
 
 # Model sets: lite = 2 small models; 8/16/24/32 = everything up to that much RAM.
 models_for_set() {
@@ -88,12 +122,36 @@ models_gb() { # total download GB for a space-separated model list
   done
   printf '%s\n' "$total"
 }
-# Hardware profiles (by unified memory): lite <16 GB, standard 16-23, large 24-31, largest 32+
-profile_tier()   { case "$1" in lite) echo essentials ;; *) echo recommended ;; esac; }
-profile_models() { case "$1" in lite) models_for_set lite ;; standard) models_for_set 16 ;; large) models_for_set 24 ;; *) models_for_set 32 ;; esac; }
-profile_label()  { case "$1" in lite) echo "LITE (8 GB Macs)" ;; standard) echo "STANDARD (16 GB Macs)" ;; large) echo "LARGE (24 GB+ Macs)" ;; *) echo "LARGEST (32 GB+ Macs)" ;; esac; }
-profile_for_ram() { if [ "$1" -lt 16 ]; then echo lite; elif [ "$1" -lt 24 ]; then echo standard; elif [ "$1" -lt 32 ]; then echo large; else echo largest; fi; }
-PROFILE_ORDER="largest large standard lite"
+# Older Ollama (macOS 13) cannot run the newest models; swap in ones it can.
+compat_models() {
+  if [ "$OLLAMA_CHANNEL" = pinned ]; then printf '%s\n' "$1" | sed 's/qwen3\.5:9b/qwen3:8b/g'; else printf '%s\n' "$1"; fi
+}
+# Intel Macs: the AI runs on the processor only (no Apple GPU), so only small models are worth it.
+intel_models() { if [ "$(ram_gb)" -ge 16 ]; then echo "llama3.2:3b medgemma:4b phi4-mini"; else echo "llama3.2:3b medgemma:4b"; fi; }
+# Hardware profiles. Apple chip (by unified memory): lite <16 GB, standard 16-23, large 24-31, largest 32+.
+# Intel: intel (Recommended library) or intel-small (Essentials library, when disk is tight).
+profile_tier()   { case "$1" in lite|intel-small) echo essentials ;; *) echo recommended ;; esac; }
+profile_models() {
+  [ "$AI_AVAILABLE" = yes ] || { echo ""; return; }
+  case "$1" in
+    intel|intel-small) intel_models ;;
+    lite) compat_models "$(models_for_set lite)" ;; standard) compat_models "$(models_for_set 16)" ;;
+    large) compat_models "$(models_for_set 24)" ;; *) compat_models "$(models_for_set 32)" ;;
+  esac
+}
+profile_label()  {
+  case "$1" in
+    lite) echo "LITE (8 GB Macs)" ;; standard) echo "STANDARD (16 GB Macs)" ;; large) echo "LARGE (24 GB+ Macs)" ;;
+    intel) echo "INTEL (Intel Macs - AI runs on the processor, so answers are slower)" ;;
+    intel-small) echo "INTEL SMALL (Intel Macs, smaller library to fit the disk)" ;;
+    *) echo "LARGEST (32 GB+ Macs)" ;;
+  esac
+}
+profile_for_ram() {
+  if [ "$MAC_ARCH" = x86_64 ]; then echo intel; return; fi
+  if [ "$1" -lt 16 ]; then echo lite; elif [ "$1" -lt 24 ]; then echo standard; elif [ "$1" -lt 32 ]; then echo large; else echo largest; fi
+}
+if [ "$MAC_ARCH" = x86_64 ]; then PROFILE_ORDER="intel intel-small"; else PROFILE_ORDER="largest large standard lite"; fi
 WIKIPEDIA_GB=127.4
 
 # ---------- Test mode ----------
@@ -119,7 +177,7 @@ start_log() { # start_log <name>: copy everything shown to logs/<name> (once per
   say "(A copy of everything shown here is saved in $KIT_LOG_FILE)"
 }
 profile_need_gb() { # programs + library + models
-  local lib=11.2; [ "$1" = lite ] && lib=3.8
+  local lib=11.2; case "$1" in lite|intel-small) lib=3.8 ;; esac
   awk -v l="$lib" -v m="$(models_gb "$(profile_models "$1")")" 'BEGIN { printf "%.1f\n", 0.5 + l + m }'
 }
 pick_profile_for_disk() { # pick_profile_for_disk <preferred> <free GB> -> "profile yes|no" (with Wikipedia?)
@@ -358,13 +416,16 @@ start_ollama() {
   local bin
   if port_up "$OLLAMA_PORT"; then say "  AI model server already running on port $OLLAMA_PORT."; return 0; fi
   if [ "$USE_SYSTEM_OLLAMA" = yes ]; then warn "  USE_SYSTEM_OLLAMA is on, but nothing answers on port $OLLAMA_PORT. Start your Ollama app first."; return 1; fi
+  if [ "$AI_AVAILABLE" != yes ]; then warn "  The AI part needs macOS 13 (Ventura) or newer; this Mac has macOS $MACOS_VER. The library still works."; return 1; fi
   bin="$(ollama_bin)" || { err "  Ollama is missing. Run SETUP-MAC.command first."; return 1; }
   ensure_dirs
   # Kit-only environment: models, keys and settings stay inside the kit folder.
   # OLLAMA_ORIGINS=* lets the chat page (opened as a local file) talk to it; it only listens on 127.0.0.1.
+  # ARCH_CMD is empty or "arch -x86_64" / "arch -arm64" (two words on purpose).
+  # shellcheck disable=SC2086
   HOME="$HOME_DIR" OLLAMA_HOST="127.0.0.1:$OLLAMA_PORT" OLLAMA_MODELS="$MODELS_DIR" \
   OLLAMA_ORIGINS='*' OLLAMA_KEEP_ALIVE=10m \
-    nohup "$bin" serve >> "$LOG_DIR/ollama-mac.log" 2>&1 < /dev/null &
+    nohup $ARCH_CMD "$bin" serve >> "$LOG_DIR/ollama-mac.log" 2>&1 < /dev/null &
   printf '%s\n' "$!" > "$(pid_file ollama)"
   local i
   for i in $(seq 1 40); do port_up "$OLLAMA_PORT" && return 0; sleep 0.5; done
@@ -383,7 +444,8 @@ start_kiwix() { # (re)starts kiwix-serve with every verified ZIM
   if [ "${#zims[@]}" -eq 0 ]; then warn "  No verified library files yet - the library will be empty."; return 1; fi
   for i in $(seq 1 10); do port_up "$LIBRARY_PORT" || break; sleep 0.5; done
   if port_up "$LIBRARY_PORT"; then err "  Port $LIBRARY_PORT is used by another program; the library cannot start."; return 1; fi
-  nohup "$bin" --address=127.0.0.1 --port="$LIBRARY_PORT" "${zims[@]}" >> "$LOG_DIR/kiwix-mac.log" 2>&1 < /dev/null &
+  # shellcheck disable=SC2086  # see start_ollama
+  nohup $ARCH_CMD "$bin" --address=127.0.0.1 --port="$LIBRARY_PORT" "${zims[@]}" >> "$LOG_DIR/kiwix-mac.log" 2>&1 < /dev/null &
   printf '%s\n' "$!" > "$(pid_file kiwix)"
   for i in $(seq 1 30); do
     if port_up "$LIBRARY_PORT"; then say "  Library is serving ${#zims[@]} collection(s)."; return 0; fi

@@ -6,7 +6,7 @@ For people comfortable with a terminal. Normal users: use **EASY-INSTALL** or **
 
 | Version | Windows | Mac | What it does |
 |---|---|---|---|
-| **Easy** | `EASY-INSTALL.bat` | `EASY-INSTALL-MAC.command` | No questions. Detects memory, graphics card and free disk space, picks a hardware profile, installs into the kit folder, adds an **Offline AI** shortcut to the Desktop, starts the kit and opens the browser. If the disk is short it drops to a smaller profile and/or skips Wikipedia instead of failing. |
+| **Easy** | `EASY-INSTALL (Windows).bat` | `EASY-INSTALL (Mac).command` (Apple chip and Intel) | No questions. Detects memory, graphics card and free disk space, picks a hardware profile, installs into the kit folder, adds an **Offline AI** shortcut to the Desktop, starts the kit and opens the browser. If the disk is short it drops to a smaller profile and/or skips Wikipedia instead of failing. |
 | **Standard** | `SETUP.bat` | `SETUP-MAC.command` | Menus: folder, library tier, model set (suggested from the hardware), and – on lighter machines or small disks – whether to include Wikipedia. |
 | **Advanced** | `scripts\setup.ps1` with options | `mac/setup.sh` with options | Everything below, plus `kit-settings.ini`. |
 
@@ -22,7 +22,7 @@ For people comfortable with a terminal. Normal users: use **EASY-INSTALL** or **
 
 VRAM is read with `nvidia-smi` (falls back to `Win32_VideoController` to spot an NVIDIA card; then VRAM counts as unknown and STANDARD is used).
 
-**Mac** (Apple Silicon shares memory between the CPU and GPU, so the choice is by RAM from `sysctl hw.memsize`):
+**Mac with an Apple chip** (memory is shared between the CPU and GPU, so the choice is by RAM from `sysctl hw.memsize`):
 
 | Profile | RAM | Library | Models | Approx. size (+127 GB Wikipedia) |
 |---|---|---|---|---|
@@ -30,6 +30,38 @@ VRAM is read with `nvidia-smi` (falls back to `Win32_VideoController` to spot an
 | STANDARD | 16–23 GB | Recommended | + `phi4-mini`, `qwen3.5:9b`, `gemma3:4b` | ~29 GB |
 | LARGE | 24–31 GB | Recommended | + `gemma3:12b`, `qwen3:14b` | ~47 GB |
 | LARGEST | 32 GB+ | Recommended | + `qwen3:30b` | ~66 GB |
+
+On **macOS 13** these use Ollama v0.12.9 and `qwen3:8b` instead of `qwen3.5:9b` (see *Which Mac, which programs* below).
+
+**Intel Mac** (Ollama runs on the CPU only, so only small models):
+
+| Profile | When | Library | Models | Approx. size (+127 GB Wikipedia) |
+|---|---|---|---|---|
+| INTEL | any Intel Mac | Recommended | `llama3.2:3b`, `medgemma:4b` (+ `phi4-mini` with 16 GB+ RAM) | ~18–20 GB |
+| INTEL SMALL | Intel Mac, tight disk | Essentials | same models | ~10–12 GB |
+
+### Which Mac, which programs
+
+The Mac scripts decide by themselves – nobody has to choose:
+
+- **Chip:** `sysctl -n hw.optional.arm64` is `1` on every Apple-chip Mac, even when Terminal runs under Rosetta
+  (then `uname -m` says `x86_64` and `sysctl.proc_translated` is `1`; the kit then starts its programs with
+  `arch -arm64`). Intel Macs don't have that key.
+- **Kiwix:** newest `kiwix-tools_macos-arm64-*.tar.gz` or `kiwix-tools_macos-x86_64-*.tar.gz` from
+  download.kiwix.org (MD5-checked). Needs macOS 12+. Kept in `runtime/mac-kiwix` or `runtime/mac-kiwix-intel`.
+- **Ollama:** `ollama-darwin.tgz` is one universal download (Apple-chip + Intel). SHA256-checked against the release's
+  `sha256sum.txt`.
+
+| macOS | Ollama | AI |
+|---|---|---|
+| 14 Sonoma or newer | newest release (`runtime/mac-ollama`) | yes |
+| 13 Ventura | **v0.12.9**, pinned – the last release built for macOS 13 (v0.12.10+ need 14). SHA256 `a3bd6456…7f17` is built into the kit and must match. Kept in `runtime/mac-ollama-v0.12.9` | yes |
+| 12 Monterey | none | library only, with a clear message |
+| 11 or older | – | setup stops with a clear message (Kiwix needs macOS 12) |
+
+For testing on another Mac: `OFFLINE_AI_MAC_ARCH=x86_64|arm64` and `OFFLINE_AI_MACOS=13.6` (environment), or
+`MAC_ARCH=` in `kit-settings.ini`. Forcing `x86_64` on an Apple-chip Mac runs the Intel programs through Rosetta
+(`arch -x86_64`), which must be installed.
 
 **Disk fallback (Easy):** it tries the profile above *with* Wikipedia (needs profile + ~140 GB), then each smaller
 profile with Wikipedia, then the original profile *without* Wikipedia, then smaller ones without. If even LITE
@@ -41,7 +73,7 @@ Windows (PowerShell, from the kit folder):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\setup.ps1 [options]
-  -Easy                     no questions (same as EASY-INSTALL.bat)
+  -Easy                     no questions (same as EASY-INSTALL (Windows).bat)
   -HardwareProfile lite|standard|full
   -Tier essentials|recommended
   -Models lite|core|full    or an exact list: -Models "qwen3.5:9b,llama3.2:3b"
@@ -60,7 +92,7 @@ Mac (Terminal, from the kit folder):
 
 ```bash
 bash mac/setup.sh [options]
-  --easy  --profile lite|standard|large|largest  --tier essentials|recommended
+  --easy  --profile lite|standard|large|largest|intel|intel-small  --tier essentials|recommended
   --models lite|8|16|24|32   or  --models "qwen3.5:9b,llama3.2:3b"
   --zims id,id  --path /Volumes/SSD/OfflineAI  --skip-wikipedia  --with-wikipedia
   --use-system-ollama  --no-start  --yes  --test  --detect-only
@@ -88,6 +120,7 @@ SETUP and START. Command-line options win over the file.
 | `OLLAMA_PORT` | `11435` (`11434` with system Ollama) | AI server port |
 | `CHAT_PORT` | `8091` | Windows chat page server port |
 | `USE_SYSTEM_OLLAMA` | `no` | `yes` = don't download/start/stop the kit's Ollama; use yours |
+| `MAC_ARCH` | (detected) | Mac only: `arm64` or `x86_64` to override the chip detection |
 
 Library ids: `knots`, `medicine`, `food`, `water`, `postdisaster`, `usda`, `appropedia`, `mdwiki` (Essentials);
 `wpmed`, `wikivoyage`, `gardening`, `ifixit` (Recommended). Full Wikipedia (`wikipedia_en_all_maxi`) is handled
@@ -107,7 +140,7 @@ the chat page is served from `http://127.0.0.1:8091`, which Ollama allows by def
 
 | Path | What |
 |---|---|
-| `runtime/` | programs (Windows: `ollama`, `kiwix`; Mac: `mac-ollama`, `mac-kiwix`) |
+| `runtime/` | programs (Windows: `ollama`, `kiwix`; Mac: `mac-ollama` or `mac-ollama-v0.12.9`, `mac-kiwix` or `mac-kiwix-intel`) |
 | `library/` | `.zim` files + `checksums/VERIFIED` markers (shared by both platforms) |
 | `ollama-models/`, `home/` | the kit's AI models and Ollama settings (shared) |
 | `logs/` | logs, pid files, `wikipedia-progress.json` |

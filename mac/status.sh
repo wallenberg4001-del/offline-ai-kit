@@ -16,7 +16,8 @@ wiki_line() {
 }
 say "Offline AI Kit status"
 show "Offline Library" "$LIBRARY_PORT"
-show "AI model server" "$OLLAMA_PORT"
+if [ "$AI_AVAILABLE" = yes ]; then show "AI model server" "$OLLAMA_PORT"; else warn "  AI model server    not available (needs macOS 13+, this Mac has $MACOS_VER)"; fi
+say "  This Mac: $MAC_KIND, macOS $MACOS_VER"
 say ""; say "Verified library collections:"
 for m in "$VERIFIED_DIR"/*.zim; do
   [ -e "$m" ] || continue

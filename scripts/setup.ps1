@@ -1,6 +1,6 @@
 # One-time setup for the Offline AI Kit (needs internet). Safe to run again:
 # finished downloads are skipped, half-finished ones resume.
-#   EASY-INSTALL.bat  -> setup.ps1 -Easy   (no questions; picks everything from the hardware)
+#   EASY-INSTALL (Windows).bat  -> setup.ps1 -Easy   (no questions; picks everything from the hardware)
 #   SETUP.bat         -> setup.ps1         (menus)
 #   Power users: see ADVANCED.md for every option below and kit-settings.ini.
 param(
@@ -56,7 +56,7 @@ $target = [System.IO.Path]::GetFullPath($target.Trim().Trim('"'))
 if ($target.TrimEnd('\','/') -ne $Kit.TrimEnd('\','/')) {
   Write-Host "Copying the kit files to $target ..."
   New-Item -ItemType Directory -Force -Path $target | Out-Null
-  foreach ($item in @('scripts','www','mac','SETUP.bat','EASY-INSTALL.bat','START-OFFLINE-AI.bat','STOP-OFFLINE-AI.bat','STATUS.bat','SETUP-MAC.command','EASY-INSTALL-MAC.command','START-OFFLINE-AI-MAC.command','STOP-OFFLINE-AI-MAC.command','STATUS-MAC.command','README.md','START-HERE.txt','ADVANCED.md','README-OUTAGE.txt','kit-settings.example.ini','kit-settings.ini','LICENSE')) {
+  foreach ($item in @('scripts','www','mac','SETUP.bat','EASY-INSTALL (Windows).bat','START-OFFLINE-AI.bat','STOP-OFFLINE-AI.bat','STATUS.bat','SETUP-MAC.command','EASY-INSTALL (Mac).command','START-OFFLINE-AI-MAC.command','STOP-OFFLINE-AI-MAC.command','STATUS-MAC.command','README.md','START-HERE.txt','ADVANCED.md','README-OUTAGE.txt','kit-settings.example.ini','kit-settings.ini','LICENSE')) {
     $src = Join-Path $Kit $item
     if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination $target -Recurse -Force }
   }
@@ -101,7 +101,7 @@ if ($TestMode) {
     Write-Host ''
     Write-Host ("There is not enough free space on this drive. The smallest version needs about {0:N0} GB" -f $lite) -ForegroundColor Red
     Write-Host ("and this drive has {0} GB free. Please delete some files (or plug in a bigger drive" -f $hw.FreeGB) -ForegroundColor Red
-    Write-Host 'and copy this folder onto it), then double-click EASY-INSTALL again.' -ForegroundColor Red
+    Write-Host 'and copy this folder onto it), then double-click EASY-INSTALL (Windows) again.' -ForegroundColor Red
     exit 1
   }
   if ($pick.Profile -ne $hwProfile) {

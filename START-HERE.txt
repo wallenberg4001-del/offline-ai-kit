@@ -7,11 +7,34 @@ library (including all of Wikipedia) on your computer, so they
 still work when the internet or power is out.
 
 
+------------------ WHICH ONE DO I NEED? ---------------------
+
+ There is ONE file to double-click. Pick your computer:
+
+   Windows PC ....................  EASY-INSTALL (Windows)
+   Mac with an Apple chip ........  EASY-INSTALL (Mac)
+   Older Mac with an Intel chip ..  EASY-INSTALL (Mac)
+                                    (the same file - it can
+                                     tell which Mac you have)
+
+ Not sure which Mac you have?
+   Click the Apple menu (top-left corner), then
+   About This Mac.
+     "Chip: Apple M1" (or M2, M3, M4, M5) = Apple chip
+     "Processor: ... Intel ..."           = Intel Mac
+
+ Not sure if you have a PC?
+   If your computer runs Windows, it is a PC.
+
+ On an Intel Mac the assistant is slower. An answer can take
+ half a minute or more. That is normal. The library is fast.
+
+
 -------------------- ON A WINDOWS PC ------------------------
 
  1.  Plug the computer into the wall and connect to the internet.
 
- 2.  Double-click the file called   EASY-INSTALL
+ 2.  Double-click the file called   EASY-INSTALL (Windows)
 
  3.  If a blue box says "Windows protected your PC":
         click  More info   then click  Run anyway
@@ -27,10 +50,11 @@ still work when the internet or power is out.
 
 
 ----------------------- ON A MAC ----------------------------
+           (Apple chip or Intel - the steps are the same)
 
  1.  Plug the Mac into the wall and connect to the internet.
 
- 2.  Double-click the file called   EASY-INSTALL-MAC
+ 2.  Double-click the file called   EASY-INSTALL (Mac)
 
  3.  If the Mac says it "cannot be opened" or is from an
      "unidentified developer":
@@ -49,15 +73,19 @@ still work when the internet or power is out.
 
  6.  Next time, just double-click  "Offline AI"  on your Desktop.
 
+ The Mac needs macOS 13 (Ventura) or newer for the assistant.
+ On macOS 12 (Monterey) you get the library only.
+
 
 ------------------- WHAT TO EXPECT --------------------------
 
  *  After it is set up, the internet is NOT needed.
 
  *  The first time it starts, it keeps downloading the whole
-    of Wikipedia quietly in the background. This can take a
-    day or more. Leave the computer plugged in and switched on.
-    Everything else works while it downloads.
+    of Wikipedia quietly in the background. This can take
+    from an hour to a day or two. Leave the computer plugged
+    in and switched on. Everything else works while it
+    downloads.
 
  *  If your computer does not have much free space, the kit
     skips Wikipedia and tells you. Everything else still works.
@@ -74,8 +102,8 @@ still work when the internet or power is out.
  *  Turn the computer off and on again, then double-click
     "Offline AI" on the Desktop.
 
- *  If the install stopped part way, double-click
-    EASY-INSTALL again. It carries on where it stopped.
+ *  If the install stopped part way, double-click the same
+    EASY-INSTALL file again. It carries on where it stopped.
 
  *  Ask the person who gave you this kit for help.
 
