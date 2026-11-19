@@ -149,7 +149,7 @@
       if (pick) modelEl.value = pick;
       statusEl.textContent = "Connected to local Ollama at " + API + ". " + names.length + " model(s) ready. Library: http://127.0.0.1:8090/";
     } catch (e) {
-      statusEl.textContent = "Cannot reach the local model server at " + API + ". Double-click START-OFFLINE-AI.bat first. (" + e.message + ")";
+      statusEl.textContent = "Cannot reach the local model server at " + API + ". Start the kit first (START-OFFLINE-AI.bat on Windows, START-OFFLINE-AI-MAC.command on Mac). (" + e.message + ")";
     }
   }
 
@@ -210,7 +210,7 @@
       if (!acc) bodyEl.textContent = "(No text came back. Try a smaller model such as llama3.2:3b.)";
     } catch (e) {
       bodyEl.parentNode.classList.add("error");
-      bodyEl.textContent = "Request failed: " + e.message + "\n\nIs START-OFFLINE-AI.bat running? If a big model is too slow, switch to qwen3.5:9b or llama3.2:3b.";
+      bodyEl.textContent = "Request failed: " + e.message + "\n\nIs the kit running (START-OFFLINE-AI)? If a big model is too slow, switch to qwen3.5:9b or llama3.2:3b.";
     } finally {
       sendEl.disabled = false;
       promptEl.focus();
@@ -222,12 +222,9 @@
   promptEl.addEventListener("keydown", function (e) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(); }
   });
-  async function wikiStatus() {
+  function showWiki(s) {
     const el = document.getElementById("wiki");
-    try {
-      const r = await fetch("/status.json", { cache: "no-store" });
-      if (!r.ok) return;
-      const s = await r.json();
+    if (!s) return;
       if (s.state === "done" || s.state === "unknown") { el.style.display = "none"; return; }
       let t = "Full Wikipedia: ";
       if (s.state === "downloading") t += "downloading in the background, " + (s.percent || 0) + "% (" + (s.message || "") + "). It appears in the library automatically when finished.";
@@ -235,7 +232,25 @@
       else t += (s.message || s.state);
       el.textContent = t;
       el.style.display = "block";
-    } catch (e) { /* page opened as a file: no status available */ }
+  }
+
+  // Windows serves this page over http and has /status.json.
+  // On Mac the page is opened as a file, so the kit writes wiki-status.js next to it instead.
+  async function wikiStatus() {
+    if (location.protocol === "file:") {
+      const old = document.getElementById("wikiStatusScript");
+      if (old) old.remove();
+      const sc = document.createElement("script");
+      sc.id = "wikiStatusScript";
+      sc.src = "wiki-status.js?t=" + Date.now();
+      sc.onload = function () { showWiki(window.WIKI_STATUS); };
+      document.head.appendChild(sc);
+      return;
+    }
+    try {
+      const r = await fetch("/status.json", { cache: "no-store" });
+      if (r.ok) showWiki(await r.json());
+    } catch (e) { /* no status available */ }
   }
 
   loadModels();

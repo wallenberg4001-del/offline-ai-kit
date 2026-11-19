@@ -28,7 +28,7 @@ $target = [System.IO.Path]::GetFullPath($target)
 if ($target.TrimEnd('\','/') -ne $Kit.TrimEnd('\','/')) {
   Write-Host "Copying the kit files to $target ..."
   New-Item -ItemType Directory -Force -Path $target | Out-Null
-  foreach ($item in @('scripts','www','SETUP.bat','START-OFFLINE-AI.bat','STOP-OFFLINE-AI.bat','STATUS.bat','README.md','README-OUTAGE.txt','LICENSE')) {
+  foreach ($item in @('scripts','www','mac','SETUP.bat','START-OFFLINE-AI.bat','STOP-OFFLINE-AI.bat','STATUS.bat','SETUP-MAC.command','START-OFFLINE-AI-MAC.command','STOP-OFFLINE-AI-MAC.command','STATUS-MAC.command','README.md','README-OUTAGE.txt','LICENSE')) {
     $src = Join-Path $Kit $item
     if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination $target -Recurse -Force }
   }

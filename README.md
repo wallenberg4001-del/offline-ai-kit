@@ -1,4 +1,4 @@
-# Offline AI Kit (Windows)
+# Offline AI Kit (Windows and Apple Silicon Mac)
 
 A "no internet needed" survival kit for your laptop:
 
@@ -12,9 +12,11 @@ and still ask questions and look things up.
 > ⚠️ The AI can be wrong. For anything medical, check the Offline Library (WikiMed,
 > Wikipedia Medicine) too, and call emergency services when you can. This is not a doctor.
 
+**Windows:** follow Steps 1–4 below. **Mac (M1 or newer):** jump to [Mac (Apple Silicon)](#mac-apple-silicon).
+
 ---
 
-## What you need
+## What you need (Windows)
 
 - Windows 10 (1803 or newer) or Windows 11, 64-bit.
 - An NVIDIA GPU is best (built for an RTX 5070 Ti laptop with 12 GB). It also runs without one, just slower.
@@ -89,13 +91,85 @@ Double-click **`STOP-OFFLINE-AI.bat`**. (A half-finished Wikipedia download is k
 
 ---
 
+## Mac (Apple Silicon)
+
+Same kit, same library, same chat page – just different double-click files ending in `.command`.
+
+### What you need (Mac)
+
+- A Mac with **Apple Silicon (M1, M2, M3, M4 or newer)**.
+- **macOS 14 Sonoma or newer** (Ollama needs it).
+- **~190 GB free** for everything (setup ~10–65 GB depending on choices, plus ~127 GB for full Wikipedia).
+  An external SSD is fine.
+- Internet for the first setup.
+
+The Mac's memory (RAM) is shared between the computer and the AI, so setup checks how much
+your Mac has ( → About This Mac) and suggests a model set:
+
+| Your Mac's memory | Set | Models | Download |
+|---|---|---|---|
+| 8 GB | Small | `llama3.2:3b`, `phi4-mini`, `medgemma:4b` | ~8 GB |
+| 16 GB | Medium | Small + `qwen3.5:9b`, `gemma3:4b` | ~18 GB |
+| 24 GB or more | Large | Medium + `gemma3:12b`, `qwen3:14b` | ~35 GB |
+| 32 GB or more (optional) | Largest | Large + `qwen3:30b` (18.6 GB) | ~54 GB |
+
+### Step 1 – Get the kit
+
+1. On this GitHub page click **Code** → **Download ZIP**. Safari unzips it into **Downloads** automatically
+   (otherwise double-click the ZIP).
+2. Move the `offline-ai-kit-main` folder where you want it (e.g. your home folder or an external SSD).
+
+### Step 2 – Run setup (once, needs internet)
+
+The easiest way (works every time, no security pop-ups):
+
+1. Open **Terminal** (press ⌘-Space, type *Terminal*, press Return).
+2. Type `bash ` (with a space after it), then **drag `SETUP-MAC.command` from the folder into the Terminal window**, and press **Return**.
+3. Answer the questions (Return picks the suggested choice): folder, library tier, model set.
+
+Setup downloads the programs (Kiwix for macOS and Ollama for macOS from their official sites),
+the library and the models, and checks every file against its official checksum. If the internet
+drops, run it again – it picks up where it stopped. It also fixes the files so that from now on you
+can simply **double-click** the `.command` files.
+
+> **If you double-click a `.command` file before running setup:** macOS may say it "cannot be opened"
+> or is "from an unidentified developer". Either **right-click (or Control-click) → Open → Open**, or go to
+> ** → System Settings → Privacy & Security**, scroll down and click **Open Anyway**. If it says you don't
+> have permission, use the Terminal method above (`bash` + drag the file) – that always works.
+
+### Step 3 – Start, stop, status
+
+- **`START-OFFLINE-AI-MAC.command`** – starts everything and opens the chat page and the Offline Library.
+- **`STOP-OFFLINE-AI-MAC.command`** – stops everything.
+- **`STATUS-MAC.command`** – shows what's running and live Wikipedia download progress.
+
+(You can always run any of them as `bash START-OFFLINE-AI-MAC.command` in Terminal.)
+
+**Full Wikipedia works the same as on Windows:** the first START begins downloading it (~127 GB) in the
+background after checking free space (warns under ~140 GB, refuses if it can't fit), keeps the Mac awake
+while it downloads (plug it in), resumes if interrupted, checks the SHA256, and then restarts the library
+by itself so Wikipedia appears. Progress shows in `STATUS-MAC.command` and at the top of the chat page.
+
+### Mac notes
+
+- The chat page is opened straight from the kit folder (`www/chat.html`) instead of from a little web server,
+  because new Macs don't come with Python or another dependable built-in web server. The kit's own Ollama is
+  set to accept requests from that page. Everything still only listens on `127.0.0.1` (this Mac).
+- Use **Chrome, Safari or Firefox**; if Safari won't connect, try Chrome or Firefox.
+- The kit's Ollama runs on port 11435 with its models in `ollama-models/` and its settings in `home/`;
+  an Ollama app you installed yourself (port 11434) is never touched.
+- One kit folder on an external drive can be used from **both** Windows and Mac: the library and models are
+  shared; each system keeps its own programs in `runtime/`.
+
+---
+
 ## Using it with no internet
 
-Nothing to change – just double-click `START-OFFLINE-AI.bat`. It never needs the internet after setup.
+Nothing to change – just double-click `START-OFFLINE-AI.bat` (Mac: `START-OFFLINE-AI-MAC.command`). It never needs the internet after setup.
 On battery, use the small models (`llama3.2:3b`, `phi4-mini`) – they're quick and gentle on power.
 Keep `README-OUTAGE.txt` handy; it's the one-page version of this.
 
-## The AI models
+## The AI models (Windows)
 
 All run on a 12 GB laptop GPU. Bigger = smarter but slower and more power-hungry.
 
@@ -118,7 +192,8 @@ Only one model is loaded at a time, so they don't add up in GPU memory.
 - A **portable Ollama** runs the AI models on `127.0.0.1:11435`. Models, settings and keys stay
   inside the kit folder (`ollama-models\`, `home\`). It does **not** touch a normal Ollama install
   (which uses port 11434), so you can have both.
-- A tiny PowerShell web server shows the chat page on `127.0.0.1:8091`. No Python needed.
+- On Windows a tiny PowerShell web server shows the chat page on `127.0.0.1:8091`. No Python needed.
+  On Mac the page is opened directly from the kit folder (see Mac notes).
 - Everything listens only on `127.0.0.1` (this computer), not your network.
 - To move the kit to another drive, stop it and move the whole folder. Nothing is installed in Windows.
 - Program and library versions are looked up when you run setup, so you get the newest ones.

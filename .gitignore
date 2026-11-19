@@ -9,3 +9,5 @@ kit-config.json
 *.zim.part
 *.part
 *.zip
+wiki-status.js
+kit-config-mac.txt

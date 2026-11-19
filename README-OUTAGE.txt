@@ -1,11 +1,12 @@
 OFFLINE AI KIT - QUICK CARD (no internet needed)
 ================================================
 
-START   Double-click START-OFFLINE-AI.bat
-        Browser opens:  Chat     http://127.0.0.1:8091/chat.html
+START   Windows: START-OFFLINE-AI.bat     Mac: START-OFFLINE-AI-MAC.command
+        Browser opens:  Chat     (Windows: http://127.0.0.1:8091/chat.html,
+                                  Mac: the chat.html file in the kit's www folder)
                         Library  http://127.0.0.1:8090/
-STOP    Double-click STOP-OFFLINE-AI.bat
-CHECK   Double-click STATUS.bat
+STOP    Windows: STOP-OFFLINE-AI.bat      Mac: STOP-OFFLINE-AI-MAC.command
+CHECK   Windows: STATUS.bat               Mac: STATUS-MAC.command
 
 WHICH AI MODEL?
   On battery / need it fast ..... llama3.2:3b  or  phi4-mini
@@ -31,4 +32,6 @@ SAFETY
 IF SOMETHING DOESN'T WORK
   1. Run STOP-OFFLINE-AI.bat, then START-OFFLINE-AI.bat again.
   2. Restart the laptop and try again.
-  3. Look in the "logs" folder for ollama.log and kiwix.log.
+  3. Look in the "logs" folder (ollama*.log, kiwix*.log).
+  4. Mac: if a .command won't open, open Terminal, type  bash  and a
+     space, drag the file in, press Return.

@@ -290,7 +290,8 @@ function Start-KitOllama {
   $saved = @{ OLLAMA_HOST=$env:OLLAMA_HOST; OLLAMA_MODELS=$env:OLLAMA_MODELS; OLLAMA_ORIGINS=$env:OLLAMA_ORIGINS; USERPROFILE=$env:USERPROFILE; HOME=$env:HOME; OLLAMA_KEEP_ALIVE=$env:OLLAMA_KEEP_ALIVE }
   $env:OLLAMA_HOST    = "127.0.0.1:$OllamaPort"
   $env:OLLAMA_MODELS  = $ModelsDir
-  $env:OLLAMA_ORIGINS = "http://127.0.0.1:$ChatPort,http://localhost:$ChatPort,file://*,null"
+  # '*' (not 'null') so the page also works if opened as a file; a bad origin entry makes Ollama refuse to start.
+  $env:OLLAMA_ORIGINS = '*'
   $env:OLLAMA_KEEP_ALIVE = '10m'
   $env:USERPROFILE    = $HomeDir
   $env:HOME           = $HomeDir
