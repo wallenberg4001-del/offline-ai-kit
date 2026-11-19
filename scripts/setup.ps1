@@ -241,8 +241,16 @@ try {
     Write-Host "  - $($m.Name) (~$($m.GB) GB) - $($m.Hint)"
     $ok = $false
     for ($t = 1; $t -le 5 -and -not $ok; $t++) {
-      & $ollama pull $m.Name
-      if ($LASTEXITCODE -eq 0) { $ok = $true } else { Write-Host '    Retrying in 20 seconds...' -ForegroundColor Yellow; Start-Sleep -Seconds 20 }
+      # Windows PowerShell turns a program's progress output on stderr into a fatal error when the
+      # output is redirected to a file, so relax that here and keep the log free of spinner codes.
+      $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+      if ([Console]::IsOutputRedirected) {
+        & $ollama pull $m.Name 2>&1 | ForEach-Object { "$_" -replace "\x1b\[[0-9;?]*[A-Za-z]", '' } |
+          Where-Object { $_ -match '\S' -and $_ -notmatch 'pulling manifest|\d+%' } | ForEach-Object { Write-Host "    $($_.Trim())" }
+      } else { & $ollama pull $m.Name }
+      $pullCode = $LASTEXITCODE
+      $ErrorActionPreference = $eap
+      if ($pullCode -eq 0) { $ok = $true } else { Write-Host '    Retrying in 20 seconds...' -ForegroundColor Yellow; Start-Sleep -Seconds 20 }
     }
     if (-not $ok) { $failed += $m.Name; continue }
     $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'

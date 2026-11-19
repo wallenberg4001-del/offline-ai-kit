@@ -194,15 +194,19 @@ function Get-CurlExe {
 
 function Invoke-CurlText([string]$Url) {
   $curl = Get-CurlExe
-  $out = & $curl -sSL --fail --retry 3 --connect-timeout 20 $Url
-  if ($LASTEXITCODE -ne 0) { throw "Could not read $Url (curl exit $LASTEXITCODE)" }
+  $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'   # see setup.ps1: stderr + redirection
+  $out = & $curl -sSL --fail --retry 3 --connect-timeout 20 $Url 2>&1 | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] }
+  $code = $LASTEXITCODE; $ErrorActionPreference = $eap
+  if ($code -ne 0) { throw "Could not read $Url (curl exit $code)" }
   return ($out -join "`n")
 }
 
 function Get-RemoteSize([string]$Url) {
   # Follows Kiwix mirror redirects and returns the final Content-Length (bytes), or 0.
   $curl = Get-CurlExe
-  $hdr = & $curl -sSIL --retry 3 --connect-timeout 20 $Url
+  $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  $hdr = & $curl -sSIL --retry 3 --connect-timeout 20 $Url 2>&1 | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] }
+  $ErrorActionPreference = $eap
   $size = [int64]0
   foreach ($l in $hdr) {
     if ($l -match '^(?i)content-length:\s*(\d+)') { $size = [int64]$Matches[1] }
@@ -266,6 +270,7 @@ function Select-FastestUrl([string]$Url) {
   $curl = Get-CurlExe
   $best = @{ Url = $Url; Speed = 0 }
   Write-Host '  Finding the fastest download server...'
+  $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
   foreach ($m in $KiwixMirrors) {
     $u = $m + $path
     $r = & $curl -s -L -o NUL --connect-timeout 5 --max-time 6 -r 0-300000000 -w '%{http_code} %{speed_download}' $u 2>$null
@@ -275,6 +280,7 @@ function Select-FastestUrl([string]$Url) {
       if ($sp -gt $best.Speed) { $best = @{ Url = $u; Speed = $sp } }
     }
   }
+  $ErrorActionPreference = $eap
   if ($best.Speed -gt 0) { Write-Host ('  Using {0} ({1:N1} MB/s in a quick test)' -f ([uri]$best.Url).Host, ($best.Speed / 1e6)) }
   return $best
 }
