@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offline AI — Survival Advisor</title>
+<style>
+  :root {
+    --bg: #12140f;
+    --panel: #1c1f18;
+    --ink: #e8eadf;
+    --muted: #a3aa94;
+    --accent: #c8e27a;
+    --accent2: #8ec7b5;
+    --warn: #e6c07b;
+    --danger: #e07a5f;
+    --line: #2c3126;
+    --user: #243026;
+    --bot: #1a1d16;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 16px/1.45 "Segoe UI", -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif; }
+  body { display: flex; flex-direction: column; min-height: 100%; }
+  header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+    display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center;
+  }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: 0.02em; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-left: auto; }
+  label { font-size: 12px; color: var(--muted); }
+  select, button, textarea {
+    font: inherit; color: var(--ink); background: #11140e; border: 1px solid var(--line); border-radius: 8px;
+  }
+  select, button { padding: 6px 10px; }
+  button { background: var(--accent); color: #1a1f0f; font-weight: 600; cursor: pointer; border: 0; }
+  button.secondary { background: transparent; color: var(--accent2); border: 1px solid var(--line); font-weight: 500; }
+  button:disabled { opacity: 0.5; cursor: wait; }
+  a { color: var(--accent2); }
+  .banner {
+    margin: 0; padding: 8px 16px; background: #2a2416; color: var(--warn); font-size: 13px; border-bottom: 1px solid var(--line);
+  }
+  main { flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { max-width: 48rem; padding: 10px 12px; border-radius: 10px; white-space: pre-wrap; word-wrap: break-word; }
+  .msg.user { align-self: flex-end; background: var(--user); border: 1px solid #314338; }
+  .msg.bot { align-self: flex-start; background: var(--bot); border: 1px solid var(--line); }
+  .msg .who { font-size: 11px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .msg.error { border-color: var(--danger); color: #f0b4a6; }
+  footer {
+    border-top: 1px solid var(--line); background: var(--panel);
+    padding: 12px 16px; display: flex; gap: 8px; align-items: flex-end;
+  }
+  textarea { flex: 1; min-height: 56px; max-height: 160px; padding: 8px 10px; resize: vertical; }
+  .status { font-size: 12px; color: var(--muted); padding: 0 16px 8px; background: var(--panel); }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Offline AI — Survival Advisor</h1>
+    <div class="sub">Runs only on this computer. No internet required.</div>
+  </div>
+  <div class="controls">
+    <label for="model">Model
+      <select id="model"></select>
+    </label>
+    <button type="button" class="secondary" id="reloadModels">Refresh models</button>
+    <a href="http://127.0.0.1:8090/" target="_blank" rel="noopener">Open Offline Library</a>
+  </div>
+</header>
+<p class="banner">This chat can be wrong. For medical, first aid, poisoning, or medication questions, also check the Offline Library (WikiMed, Wikipedia Medicine, and the survival collections). The library is more reliable than the model. This is not a substitute for emergency services.</p>
+<p class="banner" id="wiki" style="display:none"></p>
+<main id="log"></main>
+<div class="status" id="status">Checking the local model server…</div>
+<footer>
+  <textarea id="prompt" placeholder="Ask about water, shelter, first aid, repairs, food storage, power, or other practical needs…"></textarea>
+  <button type="button" id="send">Ask</button>
+</footer>
+<script>
+(function () {
+  const API = "http://127.0.0.1:11435";
+  const SYSTEM = [
+    "You are a practical offline advisor for power outages, natural disasters, first aid, repairs, water, food, sanitation, warmth, and shelter.",
+    "Give clear, conservative, step-by-step advice in plain language.",
+    "Flag dangers. Say when something needs a professional, a licensed electrician, or emergency services (call local emergency number if available).",
+    "You can be wrong. Never invent drug dosages, diagnosis, or precise medical protocols.",
+    "For ANY medical, first-aid, poisoning, wound, or medication question: answer cautiously if you can, and always tell the user to also look it up in the Offline Library at http://127.0.0.1:8090 (WikiMed / mdwiki, Wikipedia Medicine, and the post-disaster / survival ZIM collections). Treat those references as more reliable than this chat.",
+    "If you are unsure, say so, and point the user to the library. Prefer simple methods that use common household or hardware-store materials.",
+    "Do not role-play being connected to the internet. You are running locally on this computer with no internet, possibly during an outage."
+  ].join(" ");
+
+  const logEl = document.getElementById("log");
+  const statusEl = document.getElementById("status");
+  const modelEl = document.getElementById("model");
+  const promptEl = document.getElementById("prompt");
+  const sendEl = document.getElementById("send");
+  const PREFERRED = ["qwen3.5:9b", "qwen3:14b", "gemma3:12b", "gemma3:4b", "phi4-mini", "llama3.2:3b", "medgemma:4b"];
+
+  const hints = {
+    "llama3.2:3b": "Low power / fastest",
+    "qwen3.5:9b": "Best all-rounder (default)",
+    "gemma3:12b": "Stronger answers",
+    "qwen3:14b": "Strongest, uses most of the GPU",
+    "gemma3:4b": "Lighter mid-size",
+    "phi4-mini": "Small and practical",
+    "medgemma:4b": "Medical-tuned — still verify in the library"
+  };
+
+  function addMsg(role, text, isError) {
+    const div = document.createElement("div");
+    div.className = "msg " + role + (isError ? " error" : "");
+    const who = document.createElement("div");
+    who.className = "who";
+    who.textContent = role === "user" ? "You" : "Advisor";
+    const body = document.createElement("div");
+    body.textContent = text;
+    div.appendChild(who);
+    div.appendChild(body);
+    logEl.appendChild(div);
+    logEl.scrollTop = logEl.scrollHeight;
+    return body;
+  }
+
+  async function loadModels() {
+    try {
+      const r = await fetch(API + "/api/tags");
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const data = await r.json();
+      const names = (data.models || []).map(function (m) { return m.name; });
+      modelEl.innerHTML = "";
+      if (!names.length) {
+        statusEl.textContent = "The model server is up, but no models are in the offline store yet.";
+        return;
+      }
+      names.sort(function (a, b) {
+        const ia = PREFERRED.indexOf(a);
+        const ib = PREFERRED.indexOf(b);
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+      });
+      names.forEach(function (n) {
+        const opt = document.createElement("option");
+        opt.value = n;
+        opt.textContent = hints[n] ? (n + " — " + hints[n]) : n;
+        modelEl.appendChild(opt);
+      });
+      const pick = PREFERRED.find(function (n) { return names.indexOf(n) !== -1; });
+      if (pick) modelEl.value = pick;
+      statusEl.textContent = "Connected to local Ollama at " + API + ". " + names.length + " model(s) ready. Library: http://127.0.0.1:8090/";
+    } catch (e) {
+      statusEl.textContent = "Cannot reach the local model server at " + API + ". Double-click START-OFFLINE-AI.bat first. (" + e.message + ")";
+    }
+  }
+
+  async function ask() {
+    const text = promptEl.value.trim();
+    if (!text) return;
+    const model = modelEl.value;
+    if (!model) { statusEl.textContent = "No model selected."; return; }
+    promptEl.value = "";
+    addMsg("user", text);
+    const bodyEl = addMsg("bot", "Thinking…");
+    sendEl.disabled = true;
+    try {
+      const r = await fetch(API + "/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: model,
+          messages: [
+            { role: "system", content: SYSTEM },
+            { role: "user", content: text }
+          ],
+          stream: true,
+          think: false,
+          keep_alive: "5m",
+          options: { temperature: 0.3, num_ctx: 4096, num_predict: 1024 }
+        })
+      });
+      if (!r.ok) {
+        const t = await r.text();
+        throw new Error("HTTP " + r.status + " " + t);
+      }
+      const reader = r.body.getReader();
+      const dec = new TextDecoder();
+      let acc = "";
+      let buf = "";
+      bodyEl.textContent = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() || "";
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+          let obj;
+          try { obj = JSON.parse(line); } catch (e) { continue; }
+          const piece = (obj.message && obj.message.content) || obj.response || "";
+          if (piece) {
+            acc += piece;
+            bodyEl.textContent = acc;
+            logEl.scrollTop = logEl.scrollHeight;
+          }
+          if (obj.error) throw new Error(obj.error);
+        }
+      }
+      if (!acc) bodyEl.textContent = "(No text came back. Try a smaller model such as llama3.2:3b.)";
+    } catch (e) {
+      bodyEl.parentNode.classList.add("error");
+      bodyEl.textContent = "Request failed: " + e.message + "\n\nIs START-OFFLINE-AI.bat running? If a big model is too slow, switch to qwen3.5:9b or llama3.2:3b.";
+    } finally {
+      sendEl.disabled = false;
+      promptEl.focus();
+    }
+  }
+
+  document.getElementById("reloadModels").addEventListener("click", loadModels);
+  sendEl.addEventListener("click", ask);
+  promptEl.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(); }
+  });
+  async function wikiStatus() {
+    const el = document.getElementById("wiki");
+    try {
+      const r = await fetch("/status.json", { cache: "no-store" });
+      if (!r.ok) return;
+      const s = await r.json();
+      if (s.state === "done" || s.state === "unknown") { el.style.display = "none"; return; }
+      let t = "Full Wikipedia: ";
+      if (s.state === "downloading") t += "downloading in the background, " + (s.percent || 0) + "% (" + (s.message || "") + "). It appears in the library automatically when finished.";
+      else if (s.state === "verifying") t += "download finished, checking it is undamaged. Almost there.";
+      else t += (s.message || s.state);
+      el.textContent = t;
+      el.style.display = "block";
+    } catch (e) { /* page opened as a file: no status available */ }
+  }
+
+  loadModels();
+  wikiStatus();
+  setInterval(wikiStatus, 15000);
+})();
+</script>
+</body>
+</html>

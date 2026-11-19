@@ -1,0 +1,11 @@
+# Downloaded at setup time - never commit
+runtime/
+library/
+ollama-models/
+home/
+logs/
+kit-config.json
+*.zim
+*.zim.part
+*.part
+*.zip

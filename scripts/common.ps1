@@ -1,0 +1,330 @@
+# Shared settings and helpers for the Offline AI Kit.
+# Works with Windows PowerShell 5.1 (built into Windows 10/11) and PowerShell 7.
+# Everything lives inside the kit folder; nothing is installed system-wide.
+
+$ErrorActionPreference = 'Stop'
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
+
+$script:IsWin = ($env:OS -eq 'Windows_NT')
+
+# ---------- Paths (all relative to the kit folder) ----------
+$Kit        = Split-Path -Parent $PSScriptRoot
+$Runtime    = Join-Path $Kit 'runtime'
+$OllamaDir  = Join-Path $Runtime 'ollama'
+$KiwixDir   = Join-Path $Runtime 'kiwix'
+$Library    = Join-Path $Kit 'library'
+$Checksums  = Join-Path $Library 'checksums'
+$VerifiedDir= Join-Path $Checksums 'VERIFIED'
+$ModelsDir  = Join-Path $Kit 'ollama-models'
+$HomeDir    = Join-Path $Kit 'home'
+$LogDir     = Join-Path $Kit 'logs'
+$WwwDir     = Join-Path $Kit 'www'
+$ConfigFile = Join-Path $Kit 'kit-config.json'
+
+# ---------- Ports (the kit never uses the normal Ollama port 11434) ----------
+$LibraryPort = 8090
+$OllamaPort  = 11435
+$ChatPort    = 8091
+
+$KiwixBase   = 'https://download.kiwix.org'
+
+# ---------- Library catalog ----------
+# Prefix = file name without the _YYYY-MM.zim date. The newest dated file is picked at run time.
+$ZimCatalog = @(
+  @{ Id='knots';         Dir='zim/other';          Prefix='zimgit-knots_en';                     Tier='essentials';  About='Knots (how to tie them)' }
+  @{ Id='medicine';      Dir='zim/other';          Prefix='zimgit-medicine_en';                  Tier='essentials';  About='Medicine survival guides' }
+  @{ Id='food';          Dir='zim/other';          Prefix='zimgit-food-preparation_en';          Tier='essentials';  About='Food preparation and preserving' }
+  @{ Id='water';         Dir='zim/other';          Prefix='zimgit-water_en';                     Tier='essentials';  About='Water: finding, cleaning, storing' }
+  @{ Id='postdisaster';  Dir='zim/other';          Prefix='zimgit-post-disaster_en';             Tier='essentials';  About='Post-disaster survival library' }
+  @{ Id='usda';          Dir='zim/other';          Prefix='usda-2015_en';                        Tier='essentials';  About='USDA home canning / food safety' }
+  @{ Id='appropedia';    Dir='zim/other';          Prefix='appropedia_en_all_maxi';              Tier='essentials';  About='Appropedia: low-tech and sustainable how-tos' }
+  @{ Id='mdwiki';        Dir='zim/other';          Prefix='mdwiki_en_all_maxi';                  Tier='essentials';  About='WikiMed (mdwiki): medical encyclopedia' }
+  @{ Id='wpmed';         Dir='zim/wikipedia';      Prefix='wikipedia_en_medicine_maxi';          Tier='recommended'; About='Wikipedia medicine articles' }
+  @{ Id='wikivoyage';    Dir='zim/wikivoyage';     Prefix='wikivoyage_en_all_maxi';              Tier='recommended'; About='Wikivoyage travel guide' }
+  @{ Id='gardening';     Dir='zim/stack_exchange'; Prefix='gardening.stackexchange.com_en_all';  Tier='recommended'; About='Gardening Q&A' }
+  @{ Id='ifixit';        Dir='zim/ifixit';         Prefix='ifixit_en_all';                       Tier='recommended'; About='iFixit repair guides' }
+  @{ Id='wikipedia';     Dir='zim/wikipedia';      Prefix='wikipedia_en_all_maxi';               Tier='always';      About='FULL English Wikipedia with pictures (~127 GB)' }
+)
+$WikipediaPrefix = 'wikipedia_en_all_maxi'
+
+# ---------- AI models (checked against the Ollama library at setup time) ----------
+# Sized for a 12 GB VRAM laptop GPU (RTX 5070 Ti Laptop). Sizes are download sizes.
+$ModelCatalog = @(
+  @{ Name='qwen3.5:9b';   GB=6.6; Set='core'; Hint='Best all-rounder (default)' }
+  @{ Name='llama3.2:3b';  GB=2.0; Set='core'; Hint='Fastest / battery saver' }
+  @{ Name='phi4-mini';    GB=2.5; Set='core'; Hint='Small and practical' }
+  @{ Name='medgemma:4b';  GB=3.3; Set='core'; Hint='Medical-tuned (still check the library)' }
+  @{ Name='gemma3:4b';    GB=3.3; Set='full'; Hint='Light, can read photos' }
+  @{ Name='gemma3:12b';   GB=8.2; Set='full'; Hint='Stronger answers, can read photos' }
+  @{ Name='qwen3:14b';    GB=9.3; Set='full'; Hint='Strongest; uses most of the GPU' }
+)
+
+# ---------- Helpers ----------
+function Ensure-Dirs {
+  foreach ($d in @($Runtime,$OllamaDir,$KiwixDir,$Library,$Checksums,$VerifiedDir,$ModelsDir,$HomeDir,$LogDir)) {
+    if (-not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null }
+  }
+}
+
+function Write-Log([string]$File, [string]$Text) {
+  $line = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + ' ' + $Text
+  try { Add-Content -LiteralPath (Join-Path $LogDir $File) -Value $line } catch {}
+}
+
+function Get-CurlExe {
+  if ($script:IsWin) {
+    $c = Join-Path $env:SystemRoot 'System32\curl.exe'
+    if (Test-Path -LiteralPath $c) { return $c }
+  }
+  $cmd = Get-Command curl.exe -ErrorAction SilentlyContinue
+  if (-not $cmd) { $cmd = Get-Command curl -CommandType Application -ErrorAction SilentlyContinue }
+  if ($cmd) { return ($cmd | Select-Object -First 1).Source }
+  throw 'curl.exe was not found. It is built into Windows 10 (1803+) and Windows 11. Please update Windows.'
+}
+
+function Invoke-CurlText([string]$Url) {
+  $curl = Get-CurlExe
+  $out = & $curl -sSL --fail --retry 3 --connect-timeout 20 $Url
+  if ($LASTEXITCODE -ne 0) { throw "Could not read $Url (curl exit $LASTEXITCODE)" }
+  return ($out -join "`n")
+}
+
+function Get-RemoteSize([string]$Url) {
+  # Follows Kiwix mirror redirects and returns the final Content-Length (bytes), or 0.
+  $curl = Get-CurlExe
+  $hdr = & $curl -sSIL --retry 3 --connect-timeout 20 $Url
+  $size = [int64]0
+  foreach ($l in $hdr) {
+    if ($l -match '^(?i)content-length:\s*(\d+)') { $size = [int64]$Matches[1] }
+  }
+  return $size
+}
+
+function Resolve-LatestZim($Entry) {
+  # Reads the Kiwix folder listing and returns the newest file for this prefix.
+  $dirUrl = "$KiwixBase/$($Entry.Dir)/"
+  $html = Invoke-CurlText $dirUrl
+  $pattern = 'href="(' + [regex]::Escape($Entry.Prefix) + '_(\d{4}-\d{2})\.zim)"'
+  $found = [regex]::Matches($html, $pattern) | ForEach-Object { [pscustomobject]@{ File=$_.Groups[1].Value; Date=$_.Groups[2].Value } }
+  if (-not $found) { throw "No file found for $($Entry.Prefix) in $dirUrl" }
+  $latest = $found | Sort-Object Date | Select-Object -Last 1
+  return [pscustomobject]@{
+    Id     = $Entry.Id
+    File   = $latest.File
+    Url    = "$dirUrl$($latest.File)"
+    ShaUrl = "$dirUrl$($latest.File).sha256"
+    About  = $Entry.About
+  }
+}
+
+function Get-ExpectedSha([string]$ShaUrl) {
+  $t = Invoke-CurlText $ShaUrl
+  if ($t -match '([0-9a-fA-F]{64})') { return $Matches[1].ToLower() }
+  throw "Checksum file at $ShaUrl did not contain a SHA256."
+}
+
+function Test-ZimVerified([string]$File) {
+  return (Test-Path -LiteralPath (Join-Path $VerifiedDir $File)) -and (Test-Path -LiteralPath (Join-Path $Library $File))
+}
+
+function Get-VerifiedZims {
+  if (-not (Test-Path -LiteralPath $VerifiedDir)) { return @() }
+  $list = @()
+  foreach ($m in Get-ChildItem -LiteralPath $VerifiedDir -File) {
+    $z = Join-Path $Library $m.Name
+    if ($m.Name -like '*.zim' -and (Test-Path -LiteralPath $z)) { $list += $z }
+  }
+  return $list
+}
+
+function Get-FreeBytes([string]$Path) {
+  $root = [System.IO.Path]::GetPathRoot((Resolve-Path -LiteralPath $Path).Path)
+  return ([System.IO.DriveInfo]::new($root)).AvailableFreeSpace
+}
+
+function Format-GB([double]$Bytes) { return ('{0:N1} GB' -f ($Bytes / 1e9)) }
+
+function Save-ResumableFile {
+  # Downloads Url to OutFile with resume support (curl -C -), retrying on failure.
+  # Progress is shown in the window and optionally written to a JSON progress file.
+  param([string]$Url, [string]$OutFile, [int64]$ExpectedSize = 0, [string]$ProgressFile = '', [string]$Label = '', [int]$MaxTries = 1000)
+  $curl = Get-CurlExe
+  $part = "$OutFile.part"
+  if (-not $Label) { $Label = Split-Path -Leaf $OutFile }
+  if ($ExpectedSize -le 0) { $ExpectedSize = Get-RemoteSize $Url }
+  $try = 0
+  while ($true) {
+    $have = [int64]0
+    if (Test-Path -LiteralPath $part) { $have = (Get-Item -LiteralPath $part).Length }
+    if ($ExpectedSize -gt 0 -and $have -eq $ExpectedSize) { break }
+    if ($ExpectedSize -gt 0 -and $have -gt $ExpectedSize) { Remove-Item -LiteralPath $part -Force; $have = 0 }
+    $try++
+    if ($try -gt $MaxTries) { throw "Gave up downloading $Label after $MaxTries tries." }
+    $argList = @('-sS','-L','--fail','--retry','5','--retry-delay','10','--connect-timeout','30','--speed-limit','1000','--speed-time','120','-C','-','-o',('"' + $part + '"'),('"' + $Url + '"'))
+    $p = Start-Process -FilePath $curl -ArgumentList $argList -NoNewWindow -PassThru
+    $lastBytes = $have; $lastTime = Get-Date; $speed = 0
+    while (-not $p.HasExited) {
+      Start-Sleep -Seconds 2
+      $now = [int64]0
+      if (Test-Path -LiteralPath $part) { $now = (Get-Item -LiteralPath $part).Length }
+      $dt = ((Get-Date) - $lastTime).TotalSeconds
+      if ($dt -ge 5) { $speed = ($now - $lastBytes) / $dt; $lastBytes = $now; $lastTime = Get-Date }
+      Show-DownloadProgress -Label $Label -Have $now -Total $ExpectedSize -Speed $speed -ProgressFile $ProgressFile -State 'downloading'
+    }
+    $p.WaitForExit()
+    $code = $p.ExitCode
+    $have = [int64]0
+    if (Test-Path -LiteralPath $part) { $have = (Get-Item -LiteralPath $part).Length }
+    if ($code -eq 0 -and ($ExpectedSize -le 0 -or $have -eq $ExpectedSize)) { break }
+    Write-Host ''
+    Write-Host "  Connection problem (curl code $code). Will resume in 30 seconds... (try $try)" -ForegroundColor Yellow
+    Show-DownloadProgress -Label $Label -Have $have -Total $ExpectedSize -Speed 0 -ProgressFile $ProgressFile -State 'waiting-for-internet'
+    Start-Sleep -Seconds 30
+  }
+  Write-Progress -Activity $Label -Completed
+  if (Test-Path -LiteralPath $OutFile) { Remove-Item -LiteralPath $OutFile -Force }
+  Move-Item -LiteralPath $part -Destination $OutFile
+}
+
+function Show-DownloadProgress([string]$Label, [int64]$Have, [int64]$Total, [double]$Speed, [string]$ProgressFile, [string]$State) {
+  $pct = 0
+  if ($Total -gt 0) { $pct = [math]::Round(100.0 * $Have / $Total, 1) }
+  $eta = ''
+  if ($Speed -gt 0 -and $Total -gt 0) {
+    $secs = ($Total - $Have) / $Speed
+    $eta = ' - about ' + ([TimeSpan]::FromSeconds([math]::Min($secs, 8640000))).ToString('d\.hh\:mm') + ' left (d.hh:mm)'
+  }
+  $status = ('{0} of {1} ({2}%) at {3:N1} MB/s{4}' -f (Format-GB $Have), (Format-GB $Total), $pct, ($Speed/1e6), $eta)
+  $pc = [int][math]::Min(100, [math]::Max(0, $pct))
+  Write-Progress -Activity $Label -Status $status -PercentComplete $pc
+  if ($ProgressFile) { Write-ProgressFile -ProgressFile $ProgressFile -State $State -Have $Have -Total $Total -Percent $pct -Speed $Speed -Message $status }
+}
+
+function Write-ProgressFile([string]$ProgressFile, [string]$State, [int64]$Have = 0, [int64]$Total = 0, [double]$Percent = 0, [double]$Speed = 0, [string]$Message = '') {
+  $o = [ordered]@{ state=$State; bytes=$Have; total=$Total; percent=$Percent; mbps=[math]::Round($Speed/1e6,1); message=$Message; updated=(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') }
+  try { ($o | ConvertTo-Json -Compress) | Set-Content -LiteralPath $ProgressFile -Encoding UTF8 } catch {}
+}
+
+function Confirm-FileSha([string]$File, [string]$Expected, [string]$ProgressFile = '') {
+  Write-Host "  Checking the file is complete and undamaged (SHA256). Big files take a while..."
+  if ($ProgressFile) { Write-ProgressFile -ProgressFile $ProgressFile -State 'verifying' -Message 'Checking SHA256 (this can take 10-30 minutes for Wikipedia)' }
+  $got = (Get-FileHash -LiteralPath $File -Algorithm SHA256).Hash.ToLower()
+  return ($got -eq $Expected.ToLower())
+}
+
+function Get-Zim {
+  # Download + verify one resolved ZIM. Returns $true when verified.
+  param($Z, [string]$ProgressFile = '')
+  if (Test-ZimVerified $Z.File) { Write-Host "  Already verified: $($Z.File)" -ForegroundColor Green; return $true }
+  $dest = Join-Path $Library $Z.File
+  $sha  = Get-ExpectedSha $Z.ShaUrl
+  if (-not (Test-Path -LiteralPath $dest)) {
+    Save-ResumableFile -Url $Z.Url -OutFile $dest -ProgressFile $ProgressFile -Label ("Downloading " + $Z.File)
+  }
+  if (Confirm-FileSha -File $dest -Expected $sha -ProgressFile $ProgressFile) {
+    Set-Content -LiteralPath (Join-Path $VerifiedDir $Z.File) -Value $sha
+    Write-Log 'zim-downloads.log' "VERIFIED $($Z.File) $sha"
+    Write-Host "  Verified: $($Z.File)" -ForegroundColor Green
+    return $true
+  } else {
+    Write-Log 'zim-downloads.log' "SHA256_MISMATCH $($Z.File) - deleted"
+    Write-Host "  The file was damaged in transit and has been deleted: $($Z.File). Run again to re-download." -ForegroundColor Red
+    Remove-Item -LiteralPath $dest -Force
+    return $false
+  }
+}
+
+function Test-Port([int]$Port) {
+  $c = New-Object System.Net.Sockets.TcpClient
+  try {
+    $ar = $c.BeginConnect('127.0.0.1', $Port, $null, $null)
+    $ok = $ar.AsyncWaitHandle.WaitOne(700)
+    if ($ok) { $c.EndConnect($ar); return $true }
+    return $false
+  } catch { return $false } finally { $c.Close() }
+}
+
+function Get-PidFile([string]$Name) { return (Join-Path $LogDir "$Name.pid") }
+
+function Get-KitProcess([string]$Name) {
+  $pf = Get-PidFile $Name
+  if (-not (Test-Path -LiteralPath $pf)) { return $null }
+  $procId = 0
+  [int]::TryParse(((Get-Content -LiteralPath $pf -ErrorAction SilentlyContinue) | Select-Object -First 1), [ref]$procId) | Out-Null
+  if ($procId -le 0) { return $null }
+  $p = Get-Process -Id $procId -ErrorAction SilentlyContinue
+  if (-not $p) { return $null }
+  # Guard against Windows re-using the PID for an unrelated program.
+  $expected = @{ 'kiwix'=@('kiwix-serve'); 'ollama'=@('ollama'); 'chat-server'=@('powershell','pwsh'); 'wikipedia-download'=@('powershell','pwsh') }
+  if ($expected.ContainsKey($Name) -and ($expected[$Name] -notcontains $p.ProcessName.ToLower())) { return $null }
+  return $p
+}
+
+function Stop-KitProcess([string]$Name) {
+  $p = Get-KitProcess $Name
+  if ($p) {
+    if ($script:IsWin) { & taskkill.exe /PID $p.Id /T /F 2>&1 | Out-Null } else { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+    Write-Host "  Stopped $Name (pid $($p.Id))"
+  }
+  Remove-Item -LiteralPath (Get-PidFile $Name) -Force -ErrorAction SilentlyContinue
+}
+
+function Get-OllamaExe {
+  $exe = Get-ChildItem -LiteralPath $OllamaDir -Recurse -Filter 'ollama.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($exe) { return $exe.FullName }
+  return $null
+}
+
+function Get-KiwixServeExe {
+  $exe = Get-ChildItem -LiteralPath $KiwixDir -Recurse -Filter 'kiwix-serve.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($exe) { return $exe.FullName }
+  return $null
+}
+
+function Start-KitOllama {
+  if (Test-Port $OllamaPort) { Write-Host "  AI model server already running on port $OllamaPort."; return $true }
+  $exe = Get-OllamaExe
+  if (-not $exe) { Write-Host "  Ollama is missing. Run SETUP.bat first." -ForegroundColor Red; return $false }
+  Ensure-Dirs
+  # Environment for the kit's own Ollama only (child process inherits it).
+  $saved = @{ OLLAMA_HOST=$env:OLLAMA_HOST; OLLAMA_MODELS=$env:OLLAMA_MODELS; OLLAMA_ORIGINS=$env:OLLAMA_ORIGINS; USERPROFILE=$env:USERPROFILE; HOME=$env:HOME; OLLAMA_KEEP_ALIVE=$env:OLLAMA_KEEP_ALIVE }
+  $env:OLLAMA_HOST    = "127.0.0.1:$OllamaPort"
+  $env:OLLAMA_MODELS  = $ModelsDir
+  $env:OLLAMA_ORIGINS = "http://127.0.0.1:$ChatPort,http://localhost:$ChatPort,file://*,null"
+  $env:OLLAMA_KEEP_ALIVE = '10m'
+  $env:USERPROFILE    = $HomeDir
+  $env:HOME           = $HomeDir
+  try {
+    $p = Start-Process -FilePath $exe -ArgumentList 'serve' -WindowStyle Hidden -PassThru `
+         -RedirectStandardOutput (Join-Path $LogDir 'ollama.out.log') -RedirectStandardError (Join-Path $LogDir 'ollama.log')
+    Set-Content -LiteralPath (Get-PidFile 'ollama') -Value $p.Id
+  } finally {
+    foreach ($k in $saved.Keys) { Set-Item -Path "env:$k" -Value $saved[$k] -ErrorAction SilentlyContinue; if ($null -eq $saved[$k]) { Remove-Item "env:$k" -ErrorAction SilentlyContinue } }
+  }
+  for ($i = 0; $i -lt 40; $i++) { if (Test-Port $OllamaPort) { return $true }; Start-Sleep -Milliseconds 500 }
+  Write-Host "  The AI server did not answer yet. See logs\ollama.log" -ForegroundColor Yellow
+  return $false
+}
+
+function Start-KitKiwix {
+  # (Re)starts kiwix-serve with every verified ZIM.
+  Stop-KitProcess 'kiwix'
+  $exe = Get-KiwixServeExe
+  if (-not $exe) { Write-Host "  Kiwix is missing. Run SETUP.bat first." -ForegroundColor Red; return $false }
+  $zims = @(Get-VerifiedZims)
+  if ($zims.Count -eq 0) { Write-Host "  No verified library files yet - the library will be empty." -ForegroundColor Yellow; return $false }
+  for ($i = 0; $i -lt 10 -and (Test-Port $LibraryPort); $i++) { Start-Sleep -Milliseconds 500 }
+  if (Test-Port $LibraryPort) { Write-Host "  Port $LibraryPort is used by another program; the library cannot start." -ForegroundColor Red; return $false }
+  $argStr = "--address=127.0.0.1 --port=$LibraryPort " + (($zims | ForEach-Object { '"' + $_ + '"' }) -join ' ')
+  $p = Start-Process -FilePath $exe -ArgumentList $argStr -WindowStyle Hidden -PassThru `
+       -RedirectStandardOutput (Join-Path $LogDir 'kiwix.out.log') -RedirectStandardError (Join-Path $LogDir 'kiwix.log')
+  Set-Content -LiteralPath (Get-PidFile 'kiwix') -Value $p.Id
+  for ($i = 0; $i -lt 30; $i++) { if (Test-Port $LibraryPort) { Write-Host "  Library is serving $($zims.Count) collection(s)."; return $true }; Start-Sleep -Milliseconds 500 }
+  Write-Host "  The library did not answer yet. See logs\kiwix.log" -ForegroundColor Yellow
+  return $false
+}
+
+function Get-KitConfig {
+  if (Test-Path -LiteralPath $ConfigFile) { return (Get-Content -LiteralPath $ConfigFile -Raw | ConvertFrom-Json) }
+  return $null
+}
