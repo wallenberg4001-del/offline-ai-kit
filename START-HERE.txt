@@ -1,0 +1,82 @@
+==============================================================
+            OFFLINE AI KIT  -  START HERE
+==============================================================
+
+This puts a helpful "ask me anything" assistant and a big
+library (including all of Wikipedia) on your computer, so they
+still work when the internet or power is out.
+
+
+-------------------- ON A WINDOWS PC ------------------------
+
+ 1.  Plug the computer into the wall and connect to the internet.
+
+ 2.  Double-click the file called   EASY-INSTALL
+
+ 3.  If a blue box says "Windows protected your PC":
+        click  More info   then click  Run anyway
+
+ 4.  A black window opens and shows lots of writing.
+     That is normal. You do NOT need to type anything.
+     Just wait.  This takes 1 to 3 hours.
+
+ 5.  When it is finished, your web browser opens by itself
+     with the chat page and the library.
+
+ 6.  Next time, just double-click  "Offline AI"  on your Desktop.
+
+
+----------------------- ON A MAC ----------------------------
+
+ 1.  Plug the Mac into the wall and connect to the internet.
+
+ 2.  Double-click the file called   EASY-INSTALL-MAC
+
+ 3.  If the Mac says it "cannot be opened" or is from an
+     "unidentified developer":
+        click  Done  (or  OK),  then open the Apple menu
+        > System Settings > Privacy & Security,
+        scroll down and click  Open Anyway,  then  Open.
+
+     (Or: hold the Control key, click the file, choose  Open,
+      then click  Open  again.)
+
+ 4.  A window with writing opens. That is normal.
+     If it asks to use your "Desktop folder", click  Allow.
+     Just wait.  This takes 1 to 3 hours.
+
+ 5.  When it is finished, your web browser opens by itself.
+
+ 6.  Next time, just double-click  "Offline AI"  on your Desktop.
+
+
+------------------- WHAT TO EXPECT --------------------------
+
+ *  After it is set up, the internet is NOT needed.
+
+ *  The first time it starts, it keeps downloading the whole
+    of Wikipedia quietly in the background. This can take a
+    day or more. Leave the computer plugged in and switched on.
+    Everything else works while it downloads.
+
+ *  If your computer does not have much free space, the kit
+    skips Wikipedia and tells you. Everything else still works.
+
+ *  Type your question in the box at the bottom of the chat
+    page and click  Ask.
+
+ *  The assistant can be WRONG. For medicine or first aid,
+    also look it up in the library, and call 911 when you can.
+
+
+-------------------- IF SOMETHING GOES WRONG ----------------
+
+ *  Turn the computer off and on again, then double-click
+    "Offline AI" on the Desktop.
+
+ *  If the install stopped part way, double-click
+    EASY-INSTALL again. It carries on where it stopped.
+
+ *  Ask the person who gave you this kit for help.
+
+==============================================================

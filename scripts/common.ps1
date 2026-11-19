@@ -22,9 +22,38 @@ $WwwDir     = Join-Path $Kit 'www'
 $ConfigFile = Join-Path $Kit 'kit-config.json'
 
 # ---------- Ports (the kit never uses the normal Ollama port 11434) ----------
-$LibraryPort = 8090
-$OllamaPort  = 11435
-$ChatPort    = 8091
+$SettingsFile = Join-Path $Kit 'kit-settings.ini'
+
+function Read-KitSettings {
+  # Optional KEY=VALUE file for power users (see ADVANCED.md). Lines starting with # are comments.
+  $h = @{}
+  if (Test-Path -LiteralPath $SettingsFile) {
+    foreach ($line in Get-Content -LiteralPath $SettingsFile) {
+      if ($line -match '^\s*([A-Za-z_]+)\s*=\s*(.*?)\s*$' -and -not $line.TrimStart().StartsWith('#')) { $h[$Matches[1].ToUpper()] = $Matches[2] }
+    }
+  }
+  return $h
+}
+function Get-Setting([string]$Key, [string]$Default) {
+  if ($KitSettings.ContainsKey($Key) -and $KitSettings[$Key] -ne '') { return $KitSettings[$Key] }
+  return $Default
+}
+function Set-KitSetting([string]$Key, [string]$Value) {
+  $lines = @()
+  if (Test-Path -LiteralPath $SettingsFile) { $lines = @(Get-Content -LiteralPath $SettingsFile) }
+  $found = $false
+  for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match ('^\s*' + $Key + '\s*=')) { $lines[$i] = "$Key=$Value"; $found = $true } }
+  if (-not $found) { $lines += "$Key=$Value" }
+  Set-Content -LiteralPath $SettingsFile -Value $lines -Encoding ASCII
+  $script:KitSettings[$Key] = $Value
+}
+$KitSettings = Read-KitSettings
+$UseSystemOllama = ((Get-Setting 'USE_SYSTEM_OLLAMA' 'no') -match '^(?i)(yes|true|1)$')
+$SkipWikipedia   = ((Get-Setting 'SKIP_WIKIPEDIA' 'no') -match '^(?i)(yes|true|1)$')
+$LibraryPort = [int](Get-Setting 'LIBRARY_PORT' '8090')
+$defaultOllamaPort = '11435'; if ($UseSystemOllama) { $defaultOllamaPort = '11434' }
+$OllamaPort  = [int](Get-Setting 'OLLAMA_PORT' $defaultOllamaPort)
+$ChatPort    = [int](Get-Setting 'CHAT_PORT' '8091')
 
 $KiwixBase   = 'https://download.kiwix.org'
 
@@ -51,13 +80,94 @@ $WikipediaPrefix = 'wikipedia_en_all_maxi'
 # Sized for a 12 GB VRAM laptop GPU (RTX 5070 Ti Laptop). Sizes are download sizes.
 $ModelCatalog = @(
   @{ Name='qwen3.5:9b';   GB=6.6; Set='core'; Hint='Best all-rounder (default)' }
-  @{ Name='llama3.2:3b';  GB=2.0; Set='core'; Hint='Fastest / battery saver' }
+  @{ Name='llama3.2:3b';  GB=2.0; Set='lite'; Hint='Fastest / battery saver' }
   @{ Name='phi4-mini';    GB=2.5; Set='core'; Hint='Small and practical' }
-  @{ Name='medgemma:4b';  GB=3.3; Set='core'; Hint='Medical-tuned (still check the library)' }
+  @{ Name='medgemma:4b';  GB=3.3; Set='lite'; Hint='Medical-tuned (still check the library)' }
   @{ Name='gemma3:4b';    GB=3.3; Set='full'; Hint='Light, can read photos' }
   @{ Name='gemma3:12b';   GB=8.2; Set='full'; Hint='Stronger answers, can read photos' }
   @{ Name='qwen3:14b';    GB=9.3; Set='full'; Hint='Strongest; uses most of the GPU' }
 )
+# lite = 2 small models; core = lite + 2 more; full = everything.
+function Get-ModelsForSet([string]$Set) {
+  $rank = @{ lite=1; core=2; full=3 }
+  $want = $rank[$Set]; if (-not $want) { $want = 3 }
+  return @($ModelCatalog | Where-Object { $rank[$_.Set] -le $want })
+}
+
+# Hardware profiles used by EASY-INSTALL (and suggested by SETUP).
+#   LITE     - no NVIDIA GPU, under 16 GB RAM, or small disk: Essentials library + lite models
+#   STANDARD - NVIDIA GPU with under 12 GB: Recommended library + core models
+#   FULL     - NVIDIA GPU with 12 GB or more: Recommended library + all models
+$Profiles = [ordered]@{
+  full     = @{ Tier='recommended'; Models='full'; LibGB=11.2; Label='FULL (strong NVIDIA GPU)' }
+  standard = @{ Tier='recommended'; Models='core'; LibGB=11.2; Label='STANDARD (NVIDIA GPU)' }
+  lite     = @{ Tier='essentials';  Models='lite'; LibGB=3.8;  Label='LITE (lighter computer)' }
+}
+$WikipediaGB = 127.4
+
+# ---------- Test mode (for trying the kit quickly) ----------
+# OFFLINE_AI_TEST=1 (env), -Test (setup) or TEST_MODE=yes (kit-settings.ini):
+#   tiny library (2 files), one small model, and a 13 MB Wikipedia stand-in
+#   (wikipedia_en_knots_maxi) so the background download / verify / library restart is exercised.
+# OFFLINE_AI_SKIP_WIKIPEDIA=1 (env) skips Wikipedia entirely.
+$TestMode = (($env:OFFLINE_AI_TEST -match '^(?i)(1|yes|true)$') -or ((Get-Setting 'TEST_MODE' 'no') -match '^(?i)(yes|true|1)$'))
+if ($env:OFFLINE_AI_SKIP_WIKIPEDIA -match '^(?i)(1|yes|true)$') { $SkipWikipedia = $true }
+function Enable-TestMode {
+  $script:TestMode = $true
+  $script:WikipediaPrefix = 'wikipedia_en_knots_maxi'
+  $script:WikipediaGB = 0.02
+  foreach ($e in $ZimCatalog) { if ($e.Id -eq 'wikipedia') { $e.Prefix = 'wikipedia_en_knots_maxi'; $e.About = 'TEST stand-in for full Wikipedia (13 MB)' } }
+}
+if ($TestMode) { Enable-TestMode }
+$ProgramsGB  = 2.5
+
+function Get-ProfileNeedGB([string]$Name) {
+  $p = $Profiles[$Name]; $gb = $ProgramsGB + $p.LibGB
+  foreach ($m in (Get-ModelsForSet $p.Models)) { $gb += $m.GB }
+  return [math]::Round($gb, 1)
+}
+
+function Get-Hardware {
+  $ram = 0; $gpu = ''; $vram = 0
+  try { $ram = [math]::Round((Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).TotalPhysicalMemory / 1GB) } catch {}
+  $smi = Get-Command nvidia-smi.exe -ErrorAction SilentlyContinue
+  $smiPath = $null
+  if ($smi) { $smiPath = $smi.Source } elseif ($script:IsWin -and (Test-Path -LiteralPath (Join-Path $env:SystemRoot 'System32\nvidia-smi.exe'))) { $smiPath = Join-Path $env:SystemRoot 'System32\nvidia-smi.exe' }
+  if ($smiPath) {
+    try {
+      $line = (& $smiPath --query-gpu=name,memory.total --format=csv,noheader,nounits 2>$null | Select-Object -First 1)
+      if ($line) { $parts = $line.Split(','); $gpu = $parts[0].Trim(); $vram = [math]::Round([double]$parts[1].Trim() / 1024, 1) }
+    } catch {}
+  }
+  if (-not $gpu) {
+    try {
+      $vc = Get-CimInstance Win32_VideoController -ErrorAction Stop | Where-Object { $_.Name -match 'NVIDIA' } | Select-Object -First 1
+      if ($vc) { $gpu = $vc.Name; $vram = 0 }   # AdapterRAM is unreliable above 4 GB, so treat as unknown
+    } catch {}
+  }
+  $free = [math]::Round((Get-FreeBytes $Kit) / 1e9, 1)
+  return [pscustomobject]@{ RamGB=$ram; Gpu=$gpu; VramGB=$vram; FreeGB=$free }
+}
+
+function Get-HardwareProfile($Hw) {
+  if (-not $Hw.Gpu -or ($Hw.RamGB -gt 0 -and $Hw.RamGB -lt 16)) { return 'lite' }
+  if ($Hw.VramGB -ge 11.5) { return 'full' }
+  return 'standard'
+}
+
+function Select-ProfileForDisk([string]$Preferred, [double]$FreeGB) {
+  # Prefer keeping Wikipedia: try each profile (biggest first) with Wikipedia, then without.
+  $names = @($Profiles.Keys)
+  $start = [array]::IndexOf($names, $Preferred)
+  foreach ($withWiki in @($true, $false)) {
+    for ($i = $start; $i -lt $names.Count; $i++) {
+      $need = Get-ProfileNeedGB $names[$i]
+      if ($withWiki) { $need += $WikipediaGB + 12 }
+      if ($FreeGB -ge $need) { return [pscustomobject]@{ Profile=$names[$i]; Wikipedia=$withWiki; NeedGB=$need } }
+    }
+  }
+  return $null
+}
 
 # ---------- Helpers ----------
 function Ensure-Dirs {
@@ -142,7 +252,7 @@ function Get-FreeBytes([string]$Path) {
   return ([System.IO.DriveInfo]::new($root)).AvailableFreeSpace
 }
 
-function Format-GB([double]$Bytes) { return ('{0:N1} GB' -f ($Bytes / 1e9)) }
+function Format-GB([double]$Bytes) { if ($Bytes -lt 1e9) { return ('{0:N0} MB' -f ($Bytes / 1e6)) }; return ('{0:N1} GB' -f ($Bytes / 1e9)) }
 
 function Save-ResumableFile {
   # Downloads Url to OutFile with resume support (curl -C -), retrying on failure.
@@ -283,6 +393,7 @@ function Get-KiwixServeExe {
 
 function Start-KitOllama {
   if (Test-Port $OllamaPort) { Write-Host "  AI model server already running on port $OllamaPort."; return $true }
+  if ($UseSystemOllama) { Write-Host "  USE_SYSTEM_OLLAMA is on, but nothing answers on port $OllamaPort. Start your Ollama app first." -ForegroundColor Yellow; return $false }
   $exe = Get-OllamaExe
   if (-not $exe) { Write-Host "  Ollama is missing. Run SETUP.bat first." -ForegroundColor Red; return $false }
   Ensure-Dirs
@@ -328,4 +439,24 @@ function Start-KitKiwix {
 function Get-KitConfig {
   if (Test-Path -LiteralPath $ConfigFile) { return (Get-Content -LiteralPath $ConfigFile -Raw | ConvertFrom-Json) }
   return $null
+}
+
+function Write-ChatConfig {
+  # Tells the chat page which ports to use (read by www/chat.html).
+  $js = "window.KIT_CONFIG = { ollamaPort: $OllamaPort, libraryPort: $LibraryPort };"
+  try { Set-Content -LiteralPath (Join-Path $WwwDir 'kit-config.js') -Value $js -Encoding ASCII } catch {}
+}
+
+function New-DesktopShortcut {
+  try {
+    $desk = [Environment]::GetFolderPath('Desktop')
+    $ws = New-Object -ComObject WScript.Shell
+    $lnk = $ws.CreateShortcut((Join-Path $desk 'Offline AI.lnk'))
+    $lnk.TargetPath = Join-Path $Kit 'START-OFFLINE-AI.bat'
+    $lnk.WorkingDirectory = $Kit
+    $lnk.Description = 'Start the Offline AI Kit'
+    $lnk.IconLocation = "$env:SystemRoot\System32\shell32.dll,13"
+    $lnk.Save()
+    Write-Host "  Put an 'Offline AI' shortcut on the Desktop." -ForegroundColor Green
+  } catch { Write-Host '  Could not create the Desktop shortcut (not a problem; use START-OFFLINE-AI.bat).' -ForegroundColor Yellow }
 }

@@ -11,3 +11,5 @@ kit-config.json
 *.zip
 wiki-status.js
 kit-config-mac.txt
+kit-settings.ini
+kit-config.js

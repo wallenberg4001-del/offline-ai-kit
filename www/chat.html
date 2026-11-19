@@ -67,7 +67,7 @@
       <select id="model"></select>
     </label>
     <button type="button" class="secondary" id="reloadModels">Refresh models</button>
-    <a href="http://127.0.0.1:8090/" target="_blank" rel="noopener">Open Offline Library</a>
+    <a id="libLink" href="http://127.0.0.1:8090/" target="_blank" rel="noopener">Open Offline Library</a>
   </div>
 </header>
 <p class="banner">This chat can be wrong. For medical, first aid, poisoning, or medication questions, also check the Offline Library (WikiMed, Wikipedia Medicine, and the survival collections). The library is more reliable than the model. This is not a substitute for emergency services.</p>
@@ -78,15 +78,20 @@
   <textarea id="prompt" placeholder="Ask about water, shelter, first aid, repairs, food storage, power, or other practical needs…"></textarea>
   <button type="button" id="send">Ask</button>
 </footer>
+<script src="kit-config.js"></script>
 <script>
 (function () {
-  const API = "http://127.0.0.1:11435";
+  // Ports come from kit-config.js (written by the START script); these are the defaults.
+  const CFG = window.KIT_CONFIG || {};
+  const API = "http://127.0.0.1:" + (CFG.ollamaPort || 11435);
+  const LIB = "http://127.0.0.1:" + (CFG.libraryPort || 8090) + "/";
+  document.getElementById("libLink").href = LIB;
   const SYSTEM = [
     "You are a practical offline advisor for power outages, natural disasters, first aid, repairs, water, food, sanitation, warmth, and shelter.",
     "Give clear, conservative, step-by-step advice in plain language.",
     "Flag dangers. Say when something needs a professional, a licensed electrician, or emergency services (call local emergency number if available).",
     "You can be wrong. Never invent drug dosages, diagnosis, or precise medical protocols.",
-    "For ANY medical, first-aid, poisoning, wound, or medication question: answer cautiously if you can, and always tell the user to also look it up in the Offline Library at http://127.0.0.1:8090 (WikiMed / mdwiki, Wikipedia Medicine, and the post-disaster / survival ZIM collections). Treat those references as more reliable than this chat.",
+    "For ANY medical, first-aid, poisoning, wound, or medication question: answer cautiously if you can, and always tell the user to also look it up in the Offline Library at " + LIB + " (WikiMed / mdwiki, Wikipedia Medicine, and the post-disaster / survival ZIM collections). Treat those references as more reliable than this chat.",
     "If you are unsure, say so, and point the user to the library. Prefer simple methods that use common household or hardware-store materials.",
     "Do not role-play being connected to the internet. You are running locally on this computer with no internet, possibly during an outage."
   ].join(" ");
@@ -147,7 +152,7 @@
       });
       const pick = PREFERRED.find(function (n) { return names.indexOf(n) !== -1; });
       if (pick) modelEl.value = pick;
-      statusEl.textContent = "Connected to local Ollama at " + API + ". " + names.length + " model(s) ready. Library: http://127.0.0.1:8090/";
+      statusEl.textContent = "Connected to local Ollama at " + API + ". " + names.length + " model(s) ready. Library: " + LIB;
     } catch (e) {
       statusEl.textContent = "Cannot reach the local model server at " + API + ". Start the kit first (START-OFFLINE-AI.bat on Windows, START-OFFLINE-AI-MAC.command on Mac). (" + e.message + ")";
     }
@@ -225,7 +230,7 @@
   function showWiki(s) {
     const el = document.getElementById("wiki");
     if (!s) return;
-      if (s.state === "done" || s.state === "unknown") { el.style.display = "none"; return; }
+      if (s.state === "done" || s.state === "unknown" || s.state === "off") { el.style.display = "none"; return; }
       let t = "Full Wikipedia: ";
       if (s.state === "downloading") t += "downloading in the background, " + (s.percent || 0) + "% (" + (s.message || "") + "). It appears in the library automatically when finished.";
       else if (s.state === "verifying") t += "download finished, checking it is undamaged. Almost there.";

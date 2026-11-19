@@ -36,6 +36,7 @@ while ($true) {
       $json = '{"state":"unknown"}'
       $wv = Get-ChildItem -LiteralPath $VerifiedDir -Filter "$WikipediaPrefix*.zim" -ErrorAction SilentlyContinue | Select-Object -First 1
       if ($wv) { $json = '{"state":"done","percent":100,"message":"Wikipedia ready"}' }
+      elseif ($SkipWikipedia) { $json = '{"state":"off"}' }
       elseif (Test-Path -LiteralPath $pf) { $json = (Get-Content -LiteralPath $pf -Raw) }
       Send-Response $stream 200 'OK' 'application/json; charset=utf-8' ([System.Text.Encoding]::UTF8.GetBytes($json))
       continue

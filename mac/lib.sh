@@ -22,8 +22,29 @@ CONFIG_FILE="$KIT/kit-config-mac.txt"
 WIKI_PROGRESS="$LOG_DIR/wikipedia-progress.json"
 WIKI_STATUS_JS="$WWW_DIR/wiki-status.js"
 
-LIBRARY_PORT=8090
-OLLAMA_PORT=11435                     # never the normal Ollama port 11434
+SETTINGS_FILE="$KIT/kit-settings.ini"   # optional, for power users (see ADVANCED.md)
+
+setting() { # setting <KEY> <default>
+  local v=""
+  if [ -f "$SETTINGS_FILE" ]; then
+    v="$(grep -E "^[[:space:]]*$1[[:space:]]*=" "$SETTINGS_FILE" | tail -1 | sed -e 's/^[^=]*=//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tr -d '\r')"
+  fi
+  if [ -n "$v" ]; then printf '%s\n' "$v"; else printf '%s\n' "$2"; fi
+}
+set_setting() { # set_setting <KEY> <value>
+  local tmp="$SETTINGS_FILE.tmp"
+  if [ -f "$SETTINGS_FILE" ]; then grep -vE "^[[:space:]]*$1[[:space:]]*=" "$SETTINGS_FILE" > "$tmp" || true; else : > "$tmp"; fi
+  printf '%s=%s\n' "$1" "$2" >> "$tmp"
+  mv -f "$tmp" "$SETTINGS_FILE"
+}
+is_yes() { case "$1" in [Yy]|[Yy][Ee][Ss]|[Tt][Rr][Uu][Ee]|1) return 0 ;; esac; return 1; }
+load_settings() {
+  USE_SYSTEM_OLLAMA=no; is_yes "$(setting USE_SYSTEM_OLLAMA no)" && USE_SYSTEM_OLLAMA=yes
+  SKIP_WIKIPEDIA=no;    is_yes "$(setting SKIP_WIKIPEDIA no)" && SKIP_WIKIPEDIA=yes
+  LIBRARY_PORT="$(setting LIBRARY_PORT 8090)"
+  if [ "$USE_SYSTEM_OLLAMA" = yes ]; then OLLAMA_PORT="$(setting OLLAMA_PORT 11434)"; else OLLAMA_PORT="$(setting OLLAMA_PORT 11435)"; fi
+}
+load_settings                         # kit Ollama defaults to 11435, never the normal 11434
 KIWIX_BASE="https://download.kiwix.org"
 WIKIPEDIA_PREFIX="wikipedia_en_all_maxi"
 WARN_FREE_BYTES=140000000000          # warn when under ~140 GB free
@@ -52,6 +73,82 @@ gemma3:4b|3.3|16|Light, can read photos
 gemma3:12b|8.2|24|Stronger answers, can read photos
 qwen3:14b|9.3|24|Strong reasoning
 qwen3:30b|18.6|32|Biggest; fast for its size (mixture-of-experts)"
+
+# Model sets: lite = 2 small models; 8/16/24/32 = everything up to that much RAM.
+models_for_set() {
+  if [ "$1" = lite ]; then printf '%s\n' "llama3.2:3b medgemma:4b"; return; fi
+  printf '%s\n' "$MODEL_CATALOG" | awk -F'|' -v r="$1" '$3 + 0 <= r + 0 { printf "%s ", $1 }' | sed 's/ $//'
+  printf '\n'
+}
+models_gb() { # total download GB for a space-separated model list
+  local m total=0 g
+  for m in $1; do
+    g="$(printf '%s\n' "$MODEL_CATALOG" | awk -F'|' -v n="$m" '$1 == n { print $2 }')"
+    total="$(awk -v a="$total" -v b="${g:-0}" 'BEGIN { printf "%.1f", a + b }')"
+  done
+  printf '%s\n' "$total"
+}
+# Hardware profiles (by unified memory): lite <16 GB, standard 16-23, large 24-31, largest 32+
+profile_tier()   { case "$1" in lite) echo essentials ;; *) echo recommended ;; esac; }
+profile_models() { case "$1" in lite) models_for_set lite ;; standard) models_for_set 16 ;; large) models_for_set 24 ;; *) models_for_set 32 ;; esac; }
+profile_label()  { case "$1" in lite) echo "LITE (8 GB Macs)" ;; standard) echo "STANDARD (16 GB Macs)" ;; large) echo "LARGE (24 GB+ Macs)" ;; *) echo "LARGEST (32 GB+ Macs)" ;; esac; }
+profile_for_ram() { if [ "$1" -lt 16 ]; then echo lite; elif [ "$1" -lt 24 ]; then echo standard; elif [ "$1" -lt 32 ]; then echo large; else echo largest; fi; }
+PROFILE_ORDER="largest large standard lite"
+WIKIPEDIA_GB=127.4
+
+# ---------- Test mode ----------
+# OFFLINE_AI_TEST=1 (env), --test (setup) or TEST_MODE=yes (kit-settings.ini): tiny library, one small model,
+# and a 13 MB Wikipedia stand-in so the background download / verify / library restart is exercised.
+# OFFLINE_AI_SKIP_WIKIPEDIA=1 (env) skips Wikipedia entirely.
+TEST_MODE=no
+enable_test_mode() {
+  TEST_MODE=yes
+  WIKIPEDIA_PREFIX="wikipedia_en_knots_maxi"
+  WIKIPEDIA_GB=0.02
+  WARN_FREE_BYTES=1000000000
+  ZIM_CATALOG="$(printf '%s\n' "$ZIM_CATALOG" | sed 's#^wikipedia|zim/wikipedia|wikipedia_en_all_maxi|always|.*#wikipedia|zim/wikipedia|wikipedia_en_knots_maxi|always|TEST stand-in for full Wikipedia (13 MB)#')"
+}
+if is_yes "${OFFLINE_AI_TEST:-no}" || is_yes "$(setting TEST_MODE no)"; then enable_test_mode; fi
+if is_yes "${OFFLINE_AI_SKIP_WIKIPEDIA:-no}"; then SKIP_WIKIPEDIA=yes; fi
+start_log() { # start_log <name>: copy everything shown to logs/<name> (once per run)
+  [ -n "${KIT_LOGGING:-}" ] && return 0
+  export KIT_LOGGING=1
+  mkdir -p "$LOG_DIR"
+  KIT_LOG_FILE="$LOG_DIR/$1"
+  exec > >(tee -a "$KIT_LOG_FILE") 2>&1
+  say "(A copy of everything shown here is saved in $KIT_LOG_FILE)"
+}
+profile_need_gb() { # programs + library + models
+  local lib=11.2; [ "$1" = lite ] && lib=3.8
+  awk -v l="$lib" -v m="$(models_gb "$(profile_models "$1")")" 'BEGIN { printf "%.1f\n", 0.5 + l + m }'
+}
+pick_profile_for_disk() { # pick_profile_for_disk <preferred> <free GB> -> "profile yes|no" (with Wikipedia?)
+  local pref="$1" free="$2" w p started need
+  for w in yes no; do
+    started=no
+    for p in $PROFILE_ORDER; do
+      [ "$p" = "$pref" ] && started=yes
+      [ "$started" = yes ] || continue
+      need="$(profile_need_gb "$p")"
+      [ "$w" = yes ] && need="$(awk -v a="$need" -v b="$WIKIPEDIA_GB" 'BEGIN { printf "%.1f", a + b + 12 }')"
+      if awk -v f="$free" -v n="$need" 'BEGIN { exit !(f >= n) }'; then printf '%s %s\n' "$p" "$w"; return 0; fi
+    done
+  done
+  return 1
+}
+
+write_chat_config() { printf 'window.KIT_CONFIG = { ollamaPort: %s, libraryPort: %s };\n' "$OLLAMA_PORT" "$LIBRARY_PORT" > "$WWW_DIR/kit-config.js" 2>/dev/null || true; }
+
+make_desktop_shortcut() {
+  local d="$HOME/Desktop" f
+  [ -d "$d" ] || return 0
+  f="$d/Offline AI.command"
+  if printf '#!/bin/bash\n# Starts the Offline AI Kit\nexec bash "%s/START-OFFLINE-AI-MAC.command"\n' "$KIT" > "$f" 2>/dev/null; then
+    chmod +x "$f"; ok "  Put an 'Offline AI' shortcut on the Desktop."
+  else
+    warn "  Could not create the Desktop shortcut (not a problem; use START-OFFLINE-AI-MAC.command)."
+  fi
+}
 
 # ---------- output ----------
 if [ -t 1 ]; then C_RED=$'\033[31m'; C_GRN=$'\033[32m'; C_YEL=$'\033[33m'; C_OFF=$'\033[0m'; else C_RED=''; C_GRN=''; C_YEL=''; C_OFF=''; fi
@@ -220,6 +317,7 @@ kiwix_bin()  { local f; for f in "$KIWIX_DIR"/*/kiwix-serve "$KIWIX_DIR"/kiwix-s
 start_ollama() {
   local bin
   if port_up "$OLLAMA_PORT"; then say "  AI model server already running on port $OLLAMA_PORT."; return 0; fi
+  if [ "$USE_SYSTEM_OLLAMA" = yes ]; then warn "  USE_SYSTEM_OLLAMA is on, but nothing answers on port $OLLAMA_PORT. Start your Ollama app first."; return 1; fi
   bin="$(ollama_bin)" || { err "  Ollama is missing. Run SETUP-MAC.command first."; return 1; }
   ensure_dirs
   # Kit-only environment: models, keys and settings stay inside the kit folder.

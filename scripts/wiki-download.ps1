@@ -11,6 +11,7 @@ $Host.UI.RawUI.WindowTitle = 'Offline AI - downloading full Wikipedia (you can m
 $progress = Join-Path $LogDir 'wikipedia-progress.json'
 Set-Content -LiteralPath (Get-PidFile 'wikipedia-download') -Value $PID
 $WarnBytes = [int64]140e9
+if ($TestMode) { $WarnBytes = [int64]1e9; Write-Host 'TEST MODE: downloading the small Wikipedia stand-in.' -ForegroundColor Yellow }
 
 function Finish([int]$code) {
   Remove-Item -LiteralPath (Get-PidFile 'wikipedia-download') -Force -ErrorAction SilentlyContinue

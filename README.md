@@ -1,13 +1,83 @@
 # Offline AI Kit (Windows and Apple Silicon Mac)
 
-A "no internet needed" survival kit for your laptop:
+> **Not techy?** Double-click **EASY-INSTALL** (`EASY-INSTALL.bat` on Windows, `EASY-INSTALL-MAC.command` on Mac) and read `START-HERE.txt`.
+> **Want choices?** Use **SETUP** (`SETUP.bat` / `SETUP-MAC.command`) – the steps below.
+> **Power user?** See [ADVANCED.md](ADVANCED.md) (options, `kit-settings.ini`, ports, your own Ollama).
 
-- **An AI chat assistant** that runs completely on your own computer (on your NVIDIA GPU).
-- **An offline library**: full English Wikipedia with pictures, a medical encyclopedia,
-  first-aid and survival guides, water and food safety, repair guides, travel guides and more.
+## What is this?
 
-Once it's set up, you can unplug from the internet (or lose power to the router in a storm)
-and still ask questions and look things up.
+**Offline AI Kit** turns an ordinary laptop or desktop into a little "know-it-all" that works with **no internet at all**:
+
+1. **A chat assistant (AI)** – like ChatGPT, but it runs entirely on your own computer. Ask it how to purify water,
+   treat a burn, fix a leaking pipe, cook without power, or anything else. Nothing you type ever leaves the computer.
+2. **An offline library** you can search and read in your web browser – including **all of English Wikipedia with
+   pictures**, a medical encyclopedia, first-aid and survival guides, and repair manuals.
+
+## Why would I want it?
+
+- **Power cuts, storms, wildfires, earthquakes** – the internet and phone networks are often the first things to go,
+  exactly when you most need answers.
+- **Cabins, boats, RVs and remote places** with poor or no signal.
+- **Privacy** – your questions stay on your computer.
+- **Peace of mind** – a whole reference library that can't be taken offline, paywalled or changed.
+
+## What's included
+
+| | What it is | Size |
+|---|---|---|
+| 🤖 **AI assistant** | 2–8 free, open AI models (picked to suit your computer), including a medical-tuned one | 5–55 GB |
+| 📚 **Wikipedia** | All ~7 million English Wikipedia articles **with pictures** | ~127 GB |
+| 🩺 **Medical** | WikiMed medical encyclopedia, Wikipedia Medicine, survival medicine guides | ~4 GB |
+| 🏕️ **Survival** | Post-disaster library, water, food preparation & preserving, USDA canning, knots, Appropedia low-tech how-tos | ~1.5 GB |
+| 🔧 **Repair & more** | iFixit repair guides, gardening Q&A, Wikivoyage travel guide | ~5.5 GB |
+
+Everything is free and comes from the official sources (Kiwix, Ollama). Every file is checked against its official
+fingerprint (checksum) so nothing is damaged or tampered with.
+
+## What computer do I need?
+
+| | Windows | Mac |
+|---|---|---|
+| **System** | Windows 10 (1803+) or 11, 64-bit | Apple Silicon (M1 or newer), macOS 14 Sonoma or newer |
+| **Memory** | 8 GB works (LITE); 16 GB+ recommended | 8 GB works (LITE); 16 GB+ recommended |
+| **Graphics** | Any. An NVIDIA card makes the AI much faster (12 GB like an RTX 5070 Ti laptop = FULL version) | Built in – Apple Silicon is great at this |
+| **Free space** | ~190 GB for everything (an external SSD is fine). Less space? It installs a smaller version and skips Wikipedia. | same |
+| **Internet** | Only once, for setup (a few hours, plus overnight for Wikipedia) | same |
+
+## How easy is it?
+
+**Very.** Double-click **EASY-INSTALL**, wait, and your browser opens with the chat and the library.
+No questions, no accounts, no sign-ups, nothing to configure. It looks at your computer and picks the right version
+by itself, and puts an **Offline AI** shortcut on your Desktop for next time. Grandparent-friendly instructions are in
+[`START-HERE.txt`](START-HERE.txt).
+
+## FAQ
+
+**Does it really work with no internet?** Yes. After setup, unplug the router and try it.
+
+**Is it free?** Yes. The kit, the AI models and the library are all free. No subscriptions, no accounts.
+
+**Is my data private?** Yes. Everything runs on your computer and only listens to your own computer (`127.0.0.1`), not the network.
+
+**How long does setup take?** Usually 1–3 hours for the main part (depends on your internet), then Wikipedia keeps
+downloading in the background – often overnight or a day or two on slower connections. Everything else works meanwhile.
+
+**Will it slow down or change my computer?** No. Nothing is installed into Windows or macOS; it all lives in one folder.
+It only uses the computer while it's running, and STOP turns it off. To remove it, delete the folder.
+
+**Is the AI always right?** No – it can make mistakes. For medical or safety questions, also check the library, and call
+emergency services when you can. The kit is a helper, not a doctor.
+
+**Can I put it on a USB/external drive?** Yes, and the same drive can be used on both Windows and Mac.
+
+**Do I need a gaming PC?** No. Lighter computers get the LITE version automatically (smaller library, two small AI models).
+
+**Windows/Mac warns me the file is from the internet – is that OK?** Yes; it does that for any downloaded script.
+See `START-HERE.txt` for exactly what to click.
+
+**Can I share it?** Yes – it's MIT-licensed. Send the folder or the download link to anyone.
+
+---
 
 > ⚠️ The AI can be wrong. For anything medical, check the Offline Library (WikiMed,
 > Wikipedia Medicine) too, and call emergency services when you can. This is not a doctor.
@@ -67,7 +137,7 @@ You can close the black window; the kit keeps running in the background.
 
 ### 📚 Full Wikipedia downloads by itself the first time
 
-Full English Wikipedia (~127 GB) is **always** part of the kit. Because it is so big, it is not
+Full English Wikipedia (~127 GB) is part of the kit (unless there isn't room, or you switched it off – LITE machines are asked). Because it is so big, it is not
 downloaded during setup. Instead:
 
 - The **first time you run `START-OFFLINE-AI.bat`**, if Wikipedia isn't downloaded and verified yet,
