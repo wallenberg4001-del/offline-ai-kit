@@ -30,6 +30,8 @@ wiki_line() {
 }
 show_status() {
   say "Offline AI Kit status (version $KIT_VERSION)"
+  say "  Programs: runtime/${PLATFORM_ID:-unknown}"
+  if programs_missing; then missing_program_message "$PLATFORM_ID"; fi
   show "Offline Library" "$LIBRARY_PORT"
   if [ "$AI_AVAILABLE" = yes ]; then show "AI model server" "$OLLAMA_PORT"; else warn "  AI model server    not available (needs macOS 13+, this Mac has $MACOS_VER)"; fi
   [ "$SHARE_ON_WIFI" = yes ] && show "Chat page server" "$CHAT_PORT"

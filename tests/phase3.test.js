@@ -91,8 +91,8 @@ check("ip route with no src", M.lanIpFromIpRoute("default via 192.168.1.1 dev et
 
 const setupPs = read("scripts/setup.ps1");
 const setupSh = read("mac/setup.sh");
-check("Windows wizard is 7 steps with a maps step", /\$WizardSteps = 7/.test(setupPs) && /Offline maps \(optional\)/.test(setupPs));
-check("Mac/Linux wizard is 7 steps with a maps step", /WIZARD_STEPS=7/.test(setupSh) && /Offline maps \(optional\)/.test(setupSh));
+check("Windows wizard is 8 steps with a maps step", /\$WizardSteps = 8/.test(setupPs) && /Offline maps \(optional\)/.test(setupPs));
+check("Mac/Linux wizard is 8 steps with a maps step", /WIZARD_STEPS=8/.test(setupSh) && /Offline maps \(optional\)/.test(setupSh));
 check("Easy Install path does not ask for maps", /Easy Install never reaches this/.test(setupPs) && /Easy Install never reaches this/.test(setupSh));
 ["EASY-INSTALL (Windows).bat", "EASY-INSTALL (Mac).command", "EASY-INSTALL (Linux).sh"].forEach(function (f) {
   const t = read(f);
@@ -126,7 +126,7 @@ check("resolver accepts a letter suffix in bash", /\[0-9\]\{4\}-\[0-9\]\{2\}\[a-
 check("FAT32 names are refused in both libraries", /fat32/.test(read("scripts/common.ps1")) && /vfat/.test(read("scripts/common.ps1")) && /msdos/.test(read("scripts/common.ps1")) && /fat32\|vfat\|msdos/.test(read("mac/lib.sh")));
 check("exFAT mmap limit is explained for macOS", /mmap/.test(read("mac/lib.sh")) && /4 GB/.test(read("README.md")) && /exFAT/.test(read("START-HERE.txt")));
 check("USB section is in the README and START-HERE", /Running from a USB drive/.test(read("README.md")) && /RUNNING FROM A USB DRIVE/.test(read("START-HERE.txt")));
-check("version is 1.2.1", read("VERSION").trim() === "1.2.1" && /"1\.2\.1"/.test(read("www/version.js")));
+check("version is 1.3.0", read("VERSION").trim() === "1.3.0" && /"1\.3\.0"/.test(read("www/version.js")));
 
 const vm = require("vm");
 const html = read("www/maps.html");

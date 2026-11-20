@@ -6,12 +6,12 @@
 # Power-user options (see ADVANCED.md): --profile lite|standard|large|largest|intel|intel-small  --tier essentials|recommended
 #   --models lite|8|16|24|32|"name,name"  --zims id,id  --path DIR  --skip-wikipedia  --with-wikipedia
 #   --use-system-ollama  --no-start  --yes  --test (quick test install, see ADVANCED.md)
-#   --share-wifi  --extra-libraries id,id|all  --maps id,id|all
+#   --share-wifi  --extra-libraries id,id|all  --maps id,id|all  --universal
 # Linux: linux/setup.sh sets OFFLINE_AI_OS=linux and runs this same wizard.
 # shellcheck source=lib.sh
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
-DETECT=no; TEST=no; TIER=""; MODELS=""; YES=no; EASY=no; HWPROFILE=""; ZIMS=""; INSTALL_PATH=""; SKIPW=no; WITHW=no; SYSOLL=no; NOSTART=no; SHAREW=no; EXTRAS=""; MAPS=""
+DETECT=no; TEST=no; TIER=""; MODELS=""; YES=no; EASY=no; HWPROFILE=""; ZIMS=""; INSTALL_PATH=""; SKIPW=no; WITHW=no; SYSOLL=no; NOSTART=no; SHAREW=no; EXTRAS=""; MAPS=""; UNIVERSAL=no; UNIVERSAL_FLAG=no
 ORIG_ARGS=("$@")
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -31,6 +31,7 @@ while [ $# -gt 0 ]; do
     --share-wifi) SHAREW=yes ;;
     --extra-libraries) EXTRAS="${2:-}"; shift ;;
     --maps) MAPS="${2:-}"; shift ;;
+    --universal) UNIVERSAL=yes; UNIVERSAL_FLAG=yes ;;
     *) warn "Unknown option: $1 (see ADVANCED.md)" ;;
   esac
   shift
@@ -148,7 +149,7 @@ WANT_WIKI=yes; [ "$SKIPW" = yes ] && WANT_WIKI=no
 EXTRA_SEL=""; [ -n "$EXTRAS" ] && EXTRA_SEL="$(resolve_extra_ids "$EXTRAS" | tr '\n' ' ')"
 MAP_SEL=""; [ -n "$MAPS" ] && MAP_SEL="$(resolve_map_ids "$MAPS" | tr '\n' ' ')"
 SHARE_CHOICE="$SHARE_ON_WIFI"; [ "$SHAREW" = yes ] && SHARE_CHOICE=yes   # Easy keeps the current setting (off on a new kit)
-WIZARD_STEPS=7   # maps are step 6; the summary is step 7. Easy Install never asks.
+WIZARD_STEPS=8   # maps are step 6; which computers is step 7; the summary is step 8. Easy Install never asks.
 step() { say ""; printf '%s\n' "--- Step $1 of $WIZARD_STEPS: $2 ------------------------------------------------" | cut -c1-64; }
 
 if [ "$EASY" = yes ]; then
@@ -266,6 +267,24 @@ else
     uniq="$(map_unique_ids $MAP_SEL | tr '\n' ' ')"
     say "  Chosen: $MAP_SEL ($(printf '%s' "$uniq" | wc -w | tr -d ' ') file(s), about $(size_label "$(map_gb $MAP_SEL)"))"
   else say "  None (you can add them any time from $LAUNCH_STATUS)."; fi
+
+  # Step 7: this computer, or programs for every computer on one drive.
+  step 7 "Which computers"
+  say "  1) This computer only"
+  say "  2) All computers (universal drive)"
+  say "     Programs for Windows, Mac (Apple chip and Intel) and Linux (64-bit PC and ARM)."
+  say "     One shared copy of the models, Wikipedia, extra libraries and maps."
+  say "     Extra download for the other computers: about $(universal_extra_gb) GB."
+  if [ "$UNIVERSAL_FLAG" = yes ]; then
+    say "  Chosen on the command line: All computers (universal drive)"
+    UNIVERSAL=yes
+  else
+    DEF_U=1; is_yes "$(setting UNIVERSAL no)" && DEF_U=2
+    case "$(ask 'Type 1 or 2:' "$DEF_U")" in
+      2|all|ALL|[Uu]*) UNIVERSAL=yes ;;
+      *) UNIVERSAL=no ;;
+    esac
+  fi
 fi
 if [ "$TEST_MODE" = yes ]; then
   TIER="test"; ZIMS="knots,water,wpmed"; MODEL_LIST="llama3.2:3b"; [ "$AI_AVAILABLE" = yes ] || MODEL_LIST=""
@@ -274,7 +293,12 @@ fi
 lib_gb=11.2; [ "$TIER" = essentials ] && lib_gb=3.8; [ "$TIER" = test ] && lib_gb=0.2
 EXTRA_GB="$(extra_gb "$EXTRA_SEL")"
 MAP_GB="$(map_gb $MAP_SEL)"
+EXTRA_PROG=0
 est="$(awk -v l="$lib_gb" -v m="$(models_gb "$MODEL_LIST")" -v x="$EXTRA_GB" -v p="$MAP_GB" 'BEGIN { printf "%.1f", 0.5 + l + m + x + p + 0.5 }')"
+if [ "$UNIVERSAL" = yes ]; then
+  EXTRA_PROG="$(universal_extra_gb)"
+  est="$(awk -v a="$est" -v b="$EXTRA_PROG" 'BEGIN { printf "%.1f", a + b }')"
+fi
 total="$est"; [ "$WANT_WIKI" = yes ] && total="$(awk -v a="$est" -v b="$WIKIPEDIA_GB" 'BEGIN { printf "%.1f", a + b }')"
 if [ "$EASY" = yes ]; then say ""; else step "$WIZARD_STEPS" "Summary"; fi
 say "  AI models:        ${MODEL_LIST:-none (AI needs macOS 13+)}"
@@ -284,6 +308,9 @@ else say "  Full Wikipedia:   No"; fi
 if [ -n "${EXTRA_SEL// /}" ]; then say "  Extra libraries:  $EXTRA_SEL($(size_label "$EXTRA_GB"))"; else say "  Extra libraries:  none"; fi
 if [ -n "${MAP_SEL// /}" ]; then say "  Offline maps:     $MAP_SEL($(size_label "$MAP_GB"), shared files counted once)"; else say "  Offline maps:     none"; fi
 if [ "$SHARE_CHOICE" = yes ]; then say "  Share on Wi-Fi:   ON (trusted home Wi-Fi only)"; else say "  Share on Wi-Fi:   off"; fi
+if [ "$UNIVERSAL" = yes ]; then say "  Computers:        All computers (universal drive)"
+else say "  Computers:        This computer only"; fi
+if [ "$UNIVERSAL" = yes ]; then say "  Extra programs:   about $EXTRA_PROG GB (other computers). Library, models and maps stay one shared copy."; fi
 say "  Download now:     about $est GB   (with Wikipedia later: about $total GB in total)"
 say "  Free space:       $(gb "$FREE") on this drive"
 if awk -v f="$FREE" -v e="$est" 'BEGIN { exit !(f < e * 1e9) }'; then err "Not enough free space for these choices. Free up space, pick fewer extras or a smaller model size, or choose another drive."; pause_exit 1; fi
@@ -299,6 +326,9 @@ if [ "$WANT_WIKI" = yes ]; then set_setting SKIP_WIKIPEDIA no; else set_setting 
 set_share_on_wifi "$SHARE_CHOICE"
 [ -n "${EXTRA_SEL// /}" ] && set_setting EXTRA_LIBRARIES "$(printf '%s' "$EXTRA_SEL" | sed 's/ *$//' | tr ' ' ',')"
 if [ "$EASY" != yes ] || [ -n "$MAPS" ]; then set_setting MAPS "$(printf '%s' "$MAP_SEL" | sed 's/ *$//' | tr ' ' ',')"; fi
+if [ "$EASY" != yes ] || [ "$UNIVERSAL" = yes ]; then
+  if [ "$UNIVERSAL" = yes ]; then set_setting UNIVERSAL yes; else set_setting UNIVERSAL no; fi
+fi
 load_settings
 printf 'profile=%s\ntier=%s\nmodels=%s\nwikipedia=%s\ncreated=%s\n' "$PROFILE" "$TIER" "$MODEL_LIST" "$WANT_WIKI" "$(date '+%Y-%m-%d')" > "$CONFIG_FILE"
 stay_awake
@@ -314,10 +344,15 @@ for id in $EXTRA_SEL $MAP_SEL; do
   fi
 done
 
-# ---------- 3. Kiwix and 4. Ollama (Mac or Linux build, chosen by KIT_OS) ----------
+# ---------- 3. Kiwix and 4. Ollama (this computer, or every computer on one drive) ----------
 say ""
-install_kiwix_tools || pause_exit 1
-install_portable_ollama || pause_exit 1
+if [ "$UNIVERSAL" = yes ] && [ "$TEST_MODE" != yes ]; then
+  install_universal_programs || pause_exit 1
+else
+  [ "$UNIVERSAL" = yes ] && warn "TEST MODE: not downloading programs for other computers."
+  install_kiwix_tools || pause_exit 1
+  install_portable_ollama || pause_exit 1
+fi
 
 # ---------- 5. Library files ----------
 say "[3/4] Library collections ($TIER)..."

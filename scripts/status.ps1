@@ -11,6 +11,8 @@ Ensure-Dirs
 function Show([string]$name, [int]$port) { if (Test-Port $port) { Write-Host ("  {0,-22} running  (http://127.0.0.1:{1})" -f $name, $port) -ForegroundColor Green } else { Write-Host ("  {0,-22} stopped" -f $name) -ForegroundColor Yellow } }
 function Show-Status {
   Write-Host "Offline AI Kit status (version $KitVersion)"
+  Write-Host "  Programs: runtime/$($script:KitPlatformId)"
+  if ((-not $UseSystemOllama -and -not (Get-OllamaExe)) -or -not (Get-KiwixServeExe)) { Write-MissingPlatform }
   Show 'Offline Library' $LibraryPort
   Show 'AI model server' $OllamaPort
   Show 'Chat page' $ChatPort

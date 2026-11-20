@@ -34,7 +34,11 @@ There is **one file to double-click**. Pick the line that matches your computer:
 6. **Offline maps** – optional. Vancouver Island, British Columbia, Alberta and Saskatchewan are inside the one Canada map
    (about 10 GB). Kiwix publishes Canada as one file, so picking any combination, or Canada itself, downloads it once.
    Other regions are separate files. Press Enter for none. Easy Install skips this.
-7. **Summary** – every choice, the total download size and your free space, then **Proceed? (Y/N)**.
+7. **Which computers** – **This computer only**, or **All computers (universal drive)**. Universal downloads the
+   programs for Windows, Mac (Apple chip and Intel) and Linux (64-bit PC and ARM) so one exFAT drive works on each.
+   Models, Wikipedia, extra libraries and maps stay **one shared copy**. The summary shows the extra disk space
+   (about 5.5 GB more on Windows, about 7 GB more on Mac and Linux, on top of this computer's programs).
+8. **Summary** – every choice, the total download size and your free space, then **Proceed? (Y/N)**.
 
 **How do I check which Mac I have?** Click the **Apple menu** () in the top-left corner, then **About This Mac**.
 - If you see **Chip: Apple M1** (or M2, M3, M4, M5), you have an **Apple chip**.
@@ -46,7 +50,7 @@ it is a PC. Use the Windows file.
 ## How to get it
 
 1. **Download the kit:** go to the **[latest release](https://github.com/wallenberg4001-del/offline-ai-kit/releases/latest)**
-   and click **`Offline-AI-Kit-x.y.z.zip`** under **Assets** (for example `Offline-AI-Kit-1.2.1.zip`).
+   and click **`Offline-AI-Kit-x.y.z.zip`** under **Assets** (for example `Offline-AI-Kit-1.3.0.zip`).
    *(Or, on this page, click the green **Code** button, then **Download ZIP**. That works too.)*
 2. **Unzip it.**
    - **Windows:** right-click the ZIP, choose **Properties**, tick **Unblock**, click **OK**.
@@ -257,7 +261,9 @@ libraries and the maps on a FAT32 drive and tells you to use exFAT, NTFS or APFS
 - **Where it looks for free space.** The free-space check uses the drive the kit folder is on, including when Windows gives that drive a different letter the next time you plug it in.
 - **Drive letters.** Paths inside the kit are relative to the folder. The Desktop shortcut stores a full path, and **START** rewrites that shortcut every time, so run START from the USB after the letter changes.
 - **Execute permission on Mac and Linux.** exFAT often drops the execute bit, or refuses to run a program directly. Shell launchers still work. Start with `bash "/Volumes/YOURDRIVE/.../START-OFFLINE-AI-MAC.command"` or `bash "/media/.../START-OFFLINE-AI-LINUX.sh"`. If Kiwix or Ollama cannot be executed from the USB, the kit copies that program folder to a local cache (`~/Library/Caches/offline-ai-kit` on a Mac, `~/.cache/offline-ai-kit` on Linux) and runs the copy. Your library and models stay on the USB. The kit prints the exact `bash` command when it has to do this.
-- **No symlinks.** After each unpack the kit turns any symlink inside `runtime/` into a real copy, so the folder stays valid on exFAT.
+- **No symlinks.** After each unpack the kit turns any symlink inside `runtime/` into a real copy, so the folder stays valid on exFAT. A universal drive stores a real copy of the Mac AI program in both Mac folders (the upstream file is one universal binary).
+- **Which programs run.** START, STATUS and STOP look at the processor and pick `runtime/windows-x64`, `runtime/mac-arm64`, `runtime/mac-x64`, `runtime/linux-x64` or `runtime/linux-arm64`. If that folder has no programs, they say so in plain English and tell you to run SETUP while online and choose **All computers (universal drive)** (or **This computer only**). Older folders (`runtime/ollama`, `runtime/mac-ollama`, `runtime/linux-ollama`, and the matching Kiwix folders) still work for the computer they were built for.
+- **Execute bit and quarantine.** Launchers are started with `bash` or PowerShell, not by relying on the execute bit. If Mac or Linux cannot run a program directly from exFAT, the kit copies that program folder to a local cache and runs the copy. On a Mac it also clears the quarantine flag on those programs.
 - **Stay awake.** Setup and the big downloads ask the computer not to sleep (Windows execution state, `caffeinate` on a Mac, `systemd-inhibit` on Linux when it is installed).
 - **Large files and a Mac.** `kiwix-serve` on macOS opens a ZIM with `mmap`. Apple's exFAT driver fails that call once a file is over 4 GB (`Invalid argument`). Windows and Linux open those same files. On a Mac, keep files over 4 GB on APFS or the internal disk. Files under 4 GB on the USB still open. The kit does not hide the ZIMs in a Mac-only disk image, because that would break the one-drive setup for Windows and Linux. If the library fails to start for this reason, START says so.
 
@@ -437,8 +443,7 @@ by itself so Wikipedia appears. Progress shows in `STATUS-MAC.command` and at th
 - **Apple chip or Intel** is read from the hardware (`sysctl hw.optional.arm64`), so an Apple-chip Mac whose Terminal
   runs under Rosetta still gets the fast Apple-chip programs. Kiwix comes from `kiwix-tools_macos-arm64` or
   `kiwix-tools_macos-x86_64`; Ollama's `ollama-darwin.tgz` contains both.
-- One kit folder on an external drive can be used from Windows, Apple-chip Macs, Intel Macs **and Linux**: the library and
-  models are shared; each kind of computer keeps its own programs in `runtime/` (`runtime/ollama` and `runtime/kiwix` on Windows, `runtime/mac-*` on a Mac, `runtime/linux-ollama` and `runtime/linux-kiwix` on Linux). See [Running from a USB drive](#running-from-a-usb-drive).
+- One kit folder on an external drive can be used from Windows, Apple-chip Macs, Intel Macs **and Linux**. Choose **All computers (universal drive)** in SETUP so the programs for each are downloaded. The library and models are shared. Programs live in `runtime/windows-x64`, `runtime/mac-arm64`, `runtime/mac-x64`, `runtime/linux-x64` and `runtime/linux-arm64`. See [Running from a USB drive](#running-from-a-usb-drive).
 
 ## Linux
 
@@ -452,7 +457,7 @@ bash STATUS-LINUX.sh
 bash STOP-OFFLINE-AI-LINUX.sh
 ```
 
-Linux downloads `kiwix-tools_linux-x86_64` or `kiwix-tools_linux-aarch64` (the musl build when `ldd --version` says musl) and `ollama-linux-amd64.tgz` or `ollama-linux-arm64.tgz`. The chat page server is `mac/serve-chat.py`. The address phones use comes from `ip route get` (the `src` address). Ollama stays on `127.0.0.1:11435` and Kiwix on `127.0.0.1:8090`. Port 8091 is open to the network only when Share on Wi-Fi is on. On x86_64, Easy Install uses the smaller CPU-sized models (same idea as an Intel Mac); the wizard can choose a larger set.
+Linux downloads `kiwix-tools_linux-x86_64` or `kiwix-tools_linux-aarch64` (the musl build when `ldd --version` says musl) and `ollama-linux-amd64` or `ollama-linux-arm64` (`.tgz`, or `.tar.zst` when that is the file the release publishes). The chat page server is `mac/serve-chat.py`. The address phones use comes from `ip route get` (the `src` address). Ollama stays on `127.0.0.1:11435` and Kiwix on `127.0.0.1:8090`. Port 8091 is open to the network only when Share on Wi-Fi is on. On x86_64, Easy Install uses the smaller CPU-sized models (same idea as an Intel Mac); the wizard can choose a larger set.
 
 ---
 

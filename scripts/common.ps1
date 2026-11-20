@@ -10,8 +10,15 @@ $script:IsWin = ($env:OS -eq 'Windows_NT')
 # ---------- Paths (all relative to the kit folder) ----------
 $Kit        = Split-Path -Parent $PSScriptRoot
 $Runtime    = Join-Path $Kit 'runtime'
-$OllamaDir  = Join-Path $Runtime 'ollama'
-$KiwixDir   = Join-Path $Runtime 'kiwix'
+# This computer's programs live in runtime/windows-x64. Older kits used runtime\ollama
+# and runtime\kiwix; Resolve-KitRuntime still accepts those.
+$script:KitPlatformId = 'windows-x64'
+$OllamaDir  = Join-Path $Runtime 'windows-x64\ollama'
+$KiwixDir   = Join-Path $Runtime 'windows-x64\kiwix'
+# Keep in step with www/universal.js (UNIVERSAL_PROGRAM_GB and ALREADY_COUNTED_GB).
+$script:UniversalProgramGB = 8.0
+$script:OllamaPinVersion = 'v0.12.9'
+$script:OllamaPinSha = 'a3bd64569cb945133dd714f3568989f6bcd4d988a3ba47d2c0dc644770547f17'
 $Library    = Join-Path $Kit 'library'
 $Checksums  = Join-Path $Library 'checksums'
 $VerifiedDir= Join-Path $Checksums 'VERIFIED'
@@ -869,3 +876,62 @@ function Invoke-UpdateCheck {
   Write-Host "UPDATE CHECK: UPDATE AVAILABLE v$latest"
   return 'update'
 }
+
+function Test-TreeFile([string]$Dir, [string[]]$Names) {
+  if (-not $Dir -or -not (Test-Path -LiteralPath $Dir)) { return $false }
+  $hit = Get-ChildItem -LiteralPath $Dir -Recurse -File -ErrorAction SilentlyContinue |
+    Where-Object { $Names -contains $_.Name } | Select-Object -First 1
+  return [bool]$hit
+}
+
+function Resolve-KitRuntime {
+  if ($env:OFFLINE_AI_PLATFORM) { $script:KitPlatformId = $env:OFFLINE_AI_PLATFORM }
+  elseif ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64' -or $env:PROCESSOR_ARCHITEW6432 -eq 'ARM64') { $script:KitPlatformId = 'windows-arm64' }
+  elseif ($env:PROCESSOR_ARCHITECTURE -eq 'X86' -and $env:PROCESSOR_ARCHITEW6432 -ne 'AMD64') { $script:KitPlatformId = 'windows-x86' }
+  else { $script:KitPlatformId = 'windows-x64' }
+  $newO = Join-Path $Runtime (Join-Path $script:KitPlatformId 'ollama')
+  $newK = Join-Path $Runtime (Join-Path $script:KitPlatformId 'kiwix')
+  $legO = Join-Path $Runtime 'ollama'
+  $legK = Join-Path $Runtime 'kiwix'
+  if (Test-TreeFile $newO @('ollama.exe')) { $script:OllamaDir = $newO }
+  elseif ($script:KitPlatformId -eq 'windows-x64' -and (Test-TreeFile $legO @('ollama.exe'))) { $script:OllamaDir = $legO }
+  else { $script:OllamaDir = $newO }
+  if (Test-TreeFile $newK @('kiwix-serve.exe')) { $script:KiwixDir = $newK }
+  elseif ($script:KitPlatformId -eq 'windows-x64' -and (Test-TreeFile $legK @('kiwix-serve.exe'))) { $script:KiwixDir = $legK }
+  else { $script:KiwixDir = $newK }
+}
+
+function Get-UniversalExtraGB {
+  # Windows setup already counts $ProgramsGB (2.5) for this PC. Mac and Linux count about 1.
+  $mine = 2.5
+  switch ($script:KitPlatformId) {
+    'mac-arm64' { $mine = 1.0 }
+    'mac-x64' { $mine = 1.0 }
+    'linux-x64' { $mine = 1.0 }
+    'linux-arm64' { $mine = 1.0 }
+  }
+  return [math]::Round($script:UniversalProgramGB - $mine, 1)
+}
+
+function Write-MissingPlatform {
+  $id = $script:KitPlatformId
+  $who = @{
+    'windows-x64' = 'Windows (64-bit)'
+    'windows-arm64' = 'Windows on ARM'
+    'windows-x86' = '32-bit Windows'
+    'mac-arm64' = 'a Mac with an Apple chip'
+    'mac-x64' = 'an Intel Mac'
+    'linux-x64' = '64-bit Linux'
+    'linux-arm64' = 'Linux on ARM'
+  }[$id]
+  if (-not $who) { $who = 'this computer'; $id = 'windows-x64' }
+  Write-Host "This drive does not have the Offline AI programs for $who (folder runtime/$id)." -ForegroundColor Red
+  Write-Host 'The library, models and maps on the drive are shared, and they are still here.'
+  Write-Host 'Connect this computer to the internet and run SETUP.bat, then choose All computers (universal drive).'
+  Write-Host "You can also choose This computer only, which adds just this computer's programs."
+  if ($id -eq 'windows-arm64' -or $id -eq 'windows-x86') {
+    Write-Host 'The Windows programs in this kit are for 64-bit Intel and AMD PCs (runtime/windows-x64).'
+  }
+}
+
+Resolve-KitRuntime

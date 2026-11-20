@@ -7,7 +7,7 @@ For people comfortable with a terminal. Normal users: use **EASY-INSTALL** or **
 | Version | Windows | Mac | Linux | What it does |
 |---|---|---|---|---|
 | **Easy** | `EASY-INSTALL (Windows).bat` | `EASY-INSTALL (Mac).command` (Apple chip and Intel) | `bash "EASY-INSTALL (Linux).sh"` | No questions. Detects memory, graphics card and free disk space, picks a hardware profile, installs into the kit folder, adds an **Offline AI** shortcut to the Desktop, starts the kit and opens the browser. If the disk is short it drops to a smaller profile and/or skips Wikipedia instead of failing. Maps are not downloaded. |
-| **Setup Wizard** | `SETUP.bat` | `SETUP-MAC.command` | `bash SETUP-LINUX.sh` | Folder, then 7 steps: AI model size (suggested from the hardware), core library tier, full Wikipedia yes/no, Extra Libraries, Share on Wi-Fi, optional offline maps, and a summary (download size vs free space) with `Proceed? (Y/N)`. Nothing downloads before that. Choices are saved in `kit-settings.ini`. |
+| **Setup Wizard** | `SETUP.bat` | `SETUP-MAC.command` | `bash SETUP-LINUX.sh` | Folder, then 8 steps: AI model size (suggested from the hardware), core library tier, full Wikipedia yes/no, Extra Libraries, Share on Wi-Fi, optional offline maps, this computer or all computers (universal drive), and a summary (download size vs free space, including the extra program space) with `Proceed? (Y/N)`. Nothing downloads before that. Choices are saved in `kit-settings.ini`. |
 | **Advanced** | `scripts\setup.ps1` with options | `mac/setup.sh` with options | `linux/setup.sh` (same wizard; sets `OFFLINE_AI_OS=linux`) | Everything below, plus `kit-settings.ini`. |
 
 ## Hardware profiles
@@ -89,6 +89,7 @@ powershell -ExecutionPolicy Bypass -File scripts\setup.ps1 [options]
   -ShareWifi                turn on Share on Wi-Fi (saved as SHARE_ON_WIFI=1)
   -ExtraLibraries id,id     also download these Extra Libraries (ids or numbers from the list, or "all")
   -Maps id,id               also download these offline maps (ids or numbers from catalog\maps.txt, or "all")
+  -Universal                also download programs for Windows, Mac (both chips) and Linux (x64 and ARM)
 ```
 
 Any option given on the command line skips that wizard question. `-Easy` (and `-Yes`) never ask anything.
@@ -103,7 +104,7 @@ bash mac/setup.sh [options]
   --models lite|8|16|24|32   or  --models "qwen3.5:9b,llama3.2:3b"
   --zims id,id  --path /Volumes/SSD/OfflineAI  --skip-wikipedia  --with-wikipedia
   --use-system-ollama  --no-start  --yes  --test  --detect-only
-  --share-wifi  --extra-libraries id,id|all  --maps id,id|all
+  --share-wifi  --extra-libraries id,id|all  --maps id,id|all  --universal
 ```
 
 Linux is the same wizard: `bash linux/setup.sh` (or `bash SETUP-LINUX.sh`). It downloads
@@ -113,11 +114,20 @@ The phone address is the `src` address from `ip route get 1.1.1.1`.
 
 **Scripted wizard answers.** Without `--yes`/`-Easy`, the wizard reads one answer per line from standard input when it
 is not a terminal (end of input = the suggested answer). The order is: folder, AI model size, core library,
-Wikipedia (Y/N), Extra Libraries, Share on Wi-Fi (Y/N), offline maps (empty = none), Proceed (Y/N), Start now (Y/N):
+Wikipedia (Y/N), Extra Libraries, Share on Wi-Fi (Y/N), offline maps (empty = none), which computers
+(1 = this computer, 2 = all computers), Proceed (Y/N), Start now (Y/N):
 
 ```bash
-printf '\n16\n2\nY\n1\nN\n\nY\nN\n' | bash mac/setup.sh --test
+printf '\n16\n2\nY\n1\nN\n\n1\nY\nN\n' | bash mac/setup.sh --test
 ```
+
+`--universal` / `-Universal` skips that question and downloads every computer's programs. The library,
+models and maps are still downloaded once. The summary line `Extra programs:` is the extra allowance
+(5.5 GB on Windows, 7.0 GB on Mac and Linux) on top of this computer's programs. The full program
+allowance is 8 GB, which covers the compressed Ollama builds (about 1.6 GB Windows, 0.2 GB Mac stored
+twice because it is one universal binary, about 1.6 GB for each Linux CPU) plus Kiwix tools, the macOS 13
+Ollama pin, and room to unpack. Linux uses `ollama-linux-amd64.tgz` / `ollama-linux-arm64.tgz` when the
+release still publishes them, and `.tar.zst` when that is the current file.
 ```bat
 rem Windows (cmd), answers.txt holds one answer per line
 type answers.txt | powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup.ps1 -Test
@@ -149,6 +159,7 @@ SETUP and START. Command-line options win over the file.
 | `MAPS` | – | written by setup as a record of the offline maps you chose (informational). Easy Install leaves it unset unless `--maps` / `-Maps` was passed. |
 | `USE_SYSTEM_OLLAMA` | `no` | `yes` = don't download/start/stop the kit's Ollama; use yours |
 | `MAC_ARCH` | (detected) | Mac only: `arm64` or `x86_64` to override the chip detection |
+| `UNIVERSAL` | `no` | `yes` = setup also downloads programs for every supported computer (universal drive). The wizard shows the extra GB. |
 
 Library ids: `knots`, `medicine`, `food`, `water`, `postdisaster`, `usda`, `appropedia`, `mdwiki` (Essentials);
 `wpmed`, `wikivoyage`, `gardening`, `ifixit` (Recommended). Full Wikipedia (`wikipedia_en_all_maxi`) is handled
@@ -263,14 +274,14 @@ anything), or "you appear to be offline". `OFFLINE_AI_RELEASES_API=<url>` points
 
 | Path | What |
 |---|---|
-| `runtime/` | programs (Windows: `ollama`, `kiwix`; Mac: `mac-ollama` or `mac-ollama-v0.12.9`, `mac-kiwix` or `mac-kiwix-intel`; Linux: `linux-ollama`, `linux-kiwix` or `linux-kiwix-arm`) |
+| `runtime/` | programs, one folder per computer: `windows-x64`, `mac-arm64`, `mac-x64`, `linux-x64`, `linux-arm64` (each holds `ollama/` and `kiwix/`; Mac also has `ollama-v0.12.9/` for macOS 13). Older folders (`ollama`, `kiwix`, `mac-ollama`, `mac-kiwix`, `mac-kiwix-intel`, `linux-ollama`, `linux-kiwix`, `linux-kiwix-arm`) still start if the new folder is empty. |
 | `library/` | `.zim` files + `checksums/VERIFIED` markers (shared across Windows, Mac and Linux) |
 | `ollama-models/`, `home/` | the kit's AI models and Ollama settings (shared) |
 | `logs/` | logs, pid files, `wikipedia-progress.json` |
 | `www/` | chat page (`chat.html`, `ask-library.js`, `maps.html`, `maps.js`, `qr.js`, `updates.js`, `version.js`, `selftest.html`); START writes `kit-config.js` and `maps-index.js`, and on Mac/Linux `wiki-status.js` |
 | `catalog/` | `extra-libraries.txt` (Extra Libraries) and `maps.txt` (offline maps) |
 | `VERSION` | the kit version |
-| `tests/` | offline checks (`node tests/ask-library.test.js`, `node tests/phase2.test.js [--live]`, `node tests/phase3.test.js`). Only in the GitHub repo, not in the download ZIP; not needed to run the kit |
+| `tests/` | offline checks (`node tests/ask-library.test.js`, `node tests/phase2.test.js [--live]`, `node tests/phase3.test.js`, `node tests/universal.test.js`). Only in the GitHub repo, not in the download ZIP; not needed to run the kit |
 | `linux/` | Linux launchers. They set `OFFLINE_AI_OS=linux` and run the Mac bash scripts, which then pick Linux Kiwix/Ollama builds and `ip route` for the LAN address. |
 | `kit-config.json` / `kit-config-mac.txt` | what setup chose last time |
 

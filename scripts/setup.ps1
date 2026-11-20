@@ -19,9 +19,11 @@ param(
   [switch]$Yes,
   [switch]$ShareWifi,              # turn on Share on Wi-Fi (phones/tablets on the home network)
   [string]$ExtraLibraries = '',    # comma list of Extra Library ids or numbers (catalog\extra-libraries.txt), or 'all'
-  [string]$Maps = ''               # comma list of map ids or numbers (catalog\maps.txt), or 'all'. Easy Install ignores this unless you pass it.
+  [string]$Maps = '',              # comma list of map ids or numbers (catalog\maps.txt), or 'all'. Easy Install ignores this unless you pass it.
+  [switch]$Universal              # also download programs for Windows, Mac and Linux (one shared library)
 )
 . (Join-Path $PSScriptRoot 'common.ps1')
+. (Join-Path $PSScriptRoot 'programs.ps1')
 $ErrorActionPreference = 'Stop'
 $Host.UI.RawUI.WindowTitle = 'Offline AI - setup'
 if ($Easy) { $Yes = $true }
@@ -103,7 +105,7 @@ if ($target.TrimEnd('\','/') -ne $Kit.TrimEnd('\','/')) {
   Write-Host 'Continuing setup in the new folder...'
   $argList = @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $target 'scripts\setup.ps1'))
   foreach ($pair in @(@('-HardwareProfile',$HardwareProfile),@('-Tier',$Tier),@('-Models',$Models),@('-Zims',$Zims),@('-ExtraLibraries',$ExtraLibraries),@('-Maps',$Maps))) { if ($pair[1]) { $argList += @($pair[0], $pair[1]) } }
-  foreach ($sw in @(@('-Test',$Test),@('-Easy',$Easy),@('-SkipWikipedia',$SkipWikipedia),@('-WithWikipedia',$WithWikipedia),@('-UseSystemOllama',$UseSystemOllama),@('-NoStart',$NoStart),@('-Yes',$Yes),@('-ShareWifi',$ShareWifi))) { if ($sw[1]) { $argList += $sw[0] } }
+  foreach ($sw in @(@('-Test',$Test),@('-Easy',$Easy),@('-SkipWikipedia',$SkipWikipedia),@('-WithWikipedia',$WithWikipedia),@('-UseSystemOllama',$UseSystemOllama),@('-NoStart',$NoStart),@('-Yes',$Yes),@('-ShareWifi',$ShareWifi),@('-Universal',$Universal))) { if ($sw[1]) { $argList += $sw[0] } }
   & (Get-Process -Id $PID).Path @argList
   exit $LASTEXITCODE
 }
@@ -139,7 +141,8 @@ function Step([int]$n, [string]$title) {
   Write-Host ''
   Write-Host ("--- Step {0} of {1}: {2} " -f $n, $WizardSteps, $title).PadRight(64, '-') -ForegroundColor Cyan
 }
-$WizardSteps = 7   # maps are step 6; the summary is step 7. Easy Install never asks.
+$WizardSteps = 8   # maps are step 6; which computers is step 7; the summary is step 8. Easy Install never asks.
+$universal = [bool]$Universal
 
 if ($Easy) {
   $pick = Select-ProfileForDisk $hwProfile $hw.FreeGB
@@ -244,6 +247,21 @@ if ($Easy) {
     $dl = @(Get-MapDownloadSet $mapSel)
     Write-Host ('  Chosen: ' + (($mapSel | ForEach-Object { $_.Id }) -join ', ') + '  (' + $dl.Count + ' file(s), about ' + (Format-Size (Get-MapDownloadGB $mapSel)) + ')')
   } else { Write-Host '  None (you can add them any time from STATUS.bat).' }
+
+  # Step 7: this computer, or programs for every computer on one drive.
+  Step 7 'Which computers'
+  $extraNow = Get-UniversalExtraGB
+  Write-Host '  1) This computer only'
+  Write-Host '  2) All computers (universal drive)'
+  Write-Host '     Programs for Windows, Mac (Apple chip and Intel) and Linux (64-bit PC and ARM).'
+  Write-Host '     One shared copy of the models, Wikipedia, extra libraries and maps.'
+  Write-Host ("     Extra download for the other computers: about {0:N1} GB." -f $extraNow)
+  if ($Universal) { Write-Host '  Chosen on the command line: All computers (universal drive)'; $universal = $true }
+  else {
+    $defU = '1'; if ((Get-Setting 'UNIVERSAL' 'no') -match '^(?i)(yes|true|1|2)$') { $defU = '2' }
+    $a = Ask 'Type 1 or 2' $defU
+    $universal = ($a -eq '2' -or $a -match '^(?i)(all|universal)')
+  }
 }
 
 if ($TestMode) {
@@ -259,9 +277,11 @@ foreach ($m in $modelList) { $estGB += $m.GB }
 $extraGB = 0.0; foreach ($e in $extraSel) { if (-not (Get-ExtraInstalled $e)) { $extraGB += $e.GB } }
 $mapGB = Get-MapDownloadGB $mapSel
 $estGB += $extraGB + $mapGB
+$extraProg = 0.0
+if ($universal) { $extraProg = Get-UniversalExtraGB; $estGB += $extraProg }
 $free = Get-FreeBytes $Kit
 
-# Summary (Step 7 in the wizard)
+# Summary (Step 8 in the wizard)
 if (-not $Easy) { Step $WizardSteps 'Summary' } else { Write-Host '' }
 Write-Host ("  AI models:        {0}" -f (($modelList | ForEach-Object { $_.Name }) -join ', '))
 Write-Host ("  Core library:     {0}" -f $tierName)
@@ -269,6 +289,8 @@ Write-Host ("  Full Wikipedia:   {0}" -f $(if ($wantWiki) { 'Yes - about ' + (Fo
 Write-Host ("  Extra libraries:  {0}" -f $(if ($extraSel.Count) { (($extraSel | ForEach-Object { $_.Id }) -join ', ') + ' (' + (Format-Size $extraGB) + ')' } else { 'none' }))
 Write-Host ("  Offline maps:     {0}" -f $(if ($mapSel.Count) { (($mapSel | ForEach-Object { $_.Id }) -join ', ') + ' (' + (Format-Size $mapGB) + ', shared files counted once)' } else { 'none' }))
 Write-Host ("  Share on Wi-Fi:   {0}" -f $(if ($shareChoice) { 'ON (trusted home Wi-Fi only)' } else { 'off' }))
+Write-Host ("  Computers:        {0}" -f $(if ($universal) { 'All computers (universal drive)' } else { 'This computer only' }))
+if ($universal) { Write-Host ("  Extra programs:   about {0:N1} GB (other computers). Library, models and maps stay one shared copy." -f $extraProg) }
 $totalGB = $estGB; if ($wantWiki) { $totalGB += $WikipediaGB }
 Write-Host ("  Download now:     about {0:N1} GB   (with Wikipedia later: about {1:N1} GB in total)" -f $estGB, $totalGB)
 Write-Host ("  Free space:       {0} on this drive" -f (Format-GB $free))
@@ -289,6 +311,7 @@ if ($wantWiki) { Set-KitSetting 'SKIP_WIKIPEDIA' 'no' } else { Set-KitSetting 'S
 Set-ShareOnWifi $shareChoice
 if ($extraSel.Count) { Set-KitSetting 'EXTRA_LIBRARIES' (($extraSel | ForEach-Object { $_.Id }) -join ',') }
 if (-not $Easy -or $Maps) { Set-KitSetting 'MAPS' (($mapSel | ForEach-Object { $_.Id }) -join ',') }
+if (-not $Easy -or $universal) { if ($universal) { Set-KitSetting 'UNIVERSAL' 'yes' } else { Set-KitSetting 'UNIVERSAL' 'no' } }
 
 @{ profile=$hwProfile; tier=$tierName; models=(($modelList | ForEach-Object { $_.Name }) -join ','); wikipedia=$wantWiki; created=(Get-Date -Format 'yyyy-MM-dd') } | ConvertTo-Json | Set-Content -LiteralPath $ConfigFile -Encoding UTF8
 
@@ -304,47 +327,9 @@ if ($needBig -and (Test-Fat32Volume $Kit)) {
   Write-Host 'Copy this folder onto an exFAT, NTFS, or APFS drive, then run setup again.' -ForegroundColor Red
   exit 1
 }
-Write-Host '[1/4] Library program (kiwix-tools)...'
-if (Get-KiwixServeExe) { Write-Host '  Already installed.' -ForegroundColor Green }
-else {
-  $relUrl = "$KiwixBase/release/kiwix-tools/"
-  $html = Invoke-CurlText $relUrl
-  $vers = [regex]::Matches($html, 'href="(kiwix-tools_win-x86_64-(\d+)\.(\d+)\.(\d+)(?:-(\d+))?\.zip)"') | ForEach-Object {
-    $b = 0; if ($_.Groups[5].Success) { $b = [int]$_.Groups[5].Value }
-    [pscustomobject]@{ File=$_.Groups[1].Value; Key=('{0:D4}{1:D4}{2:D4}{3:D4}' -f [int]$_.Groups[2].Value,[int]$_.Groups[3].Value,[int]$_.Groups[4].Value,$b) } }
-  $k = $vers | Sort-Object Key | Select-Object -Last 1
-  if (-not $k) { throw 'Could not find kiwix-tools for Windows on download.kiwix.org' }
-  Write-Host "  Downloading $($k.File)"
-  $zip = Join-Path $Runtime $k.File
-  Save-ResumableFile -Url ($relUrl + $k.File) -OutFile $zip -Label "Downloading $($k.File)" -MaxTries 20
-  $md5 = (Invoke-CurlText ($relUrl + $k.File + '.md5')).Split(' ')[0].Trim().ToLower()
-  if ((Get-FileHash -LiteralPath $zip -Algorithm MD5).Hash.ToLower() -ne $md5) { Remove-Item -LiteralPath $zip -Force; throw 'kiwix-tools download was damaged (checksum mismatch). Run setup again.' }
-  Expand-Archive -LiteralPath $zip -DestinationPath $KiwixDir -Force
-  Repair-ExtractedLinks $KiwixDir
-  Remove-Item -LiteralPath $zip -Force
-  Write-Host '  Installed.' -ForegroundColor Green
-}
-
-# ---------- 4. Ollama (AI model server, portable) ----------
-Write-Host '[2/4] AI program (Ollama, portable - about 1.6 GB, includes NVIDIA GPU support)...'
-if ($UseSystemOllama) { Write-Host "  Using your own Ollama on port $OllamaPort (USE_SYSTEM_OLLAMA) - not downloading one." }
-elseif (Get-OllamaExe) { Write-Host '  Already installed.' -ForegroundColor Green }
-else {
-  $asset = 'ollama-windows-amd64.zip'
-  $base  = 'https://github.com/ollama/ollama/releases/latest/download/'
-  $zip = Join-Path $Runtime $asset
-  Save-ResumableFile -Url ($base + $asset) -OutFile $zip -Label "Downloading Ollama ($asset)" -MaxTries 20
-  $sums = Invoke-CurlText ($base + 'sha256sum.txt')
-  $expected = ''
-  foreach ($line in $sums -split "`n") { if ($line.Trim() -match ('^([0-9a-f]{64})\s+\S*?' + [regex]::Escape($asset) + '\s*$')) { $expected = $Matches[1] } }
-  if (-not $expected) { throw 'Could not read the Ollama checksum list.' }
-  if ((Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLower() -ne $expected) { Remove-Item -LiteralPath $zip -Force; throw 'Ollama download was damaged (checksum mismatch). Run setup again.' }
-  Write-Host '  Unpacking...'
-  Expand-Archive -LiteralPath $zip -DestinationPath $OllamaDir -Force
-  Repair-ExtractedLinks $OllamaDir
-  Remove-Item -LiteralPath $zip -Force
-  Write-Host '  Installed.' -ForegroundColor Green
-}
+if ($universal -and $TestMode) { Write-Host 'TEST MODE: not downloading programs for other computers.' -ForegroundColor Yellow }
+if ($universal -and -not $TestMode) { Install-UniversalPrograms }
+else { Install-WindowsPrograms }
 
 # ---------- 5. Library files ----------
 Write-Host "[3/4] Library collections ($tierName)..."

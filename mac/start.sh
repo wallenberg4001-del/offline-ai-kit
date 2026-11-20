@@ -20,8 +20,8 @@ if ! exec_bits_stick; then
 fi
 if [ "$SHARE_ARG" = yes ]; then set_share_on_wifi yes; warn "Share on Wi-Fi: turned ON (remembered; turn off with $LAUNCH_STATUS or --no-share-wifi)."
 elif [ "$SHARE_ARG" = no ]; then set_share_on_wifi no; say "Share on Wi-Fi: turned off (remembered)."; fi
-if { [ "$USE_SYSTEM_OLLAMA" != yes ] && [ "$AI_AVAILABLE" = yes ] && ! ollama_bin >/dev/null; } || ! kiwix_bin >/dev/null; then
-  err "The kit is not set up yet. Run $LAUNCH_SETUP first (needs internet once)."
+if programs_missing; then
+  missing_program_message "$PLATFORM_ID"
   pause_exit 1
 fi
 

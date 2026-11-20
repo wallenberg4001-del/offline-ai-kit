@@ -18,7 +18,7 @@ if ($ShareWifi) { Set-ShareOnWifi $true; Write-Host 'Share on Wi-Fi: turned ON (
 if ($NoShareWifi) { Set-ShareOnWifi $false; Write-Host 'Share on Wi-Fi: turned off (remembered).' }
 
 if ((-not $UseSystemOllama -and -not (Get-OllamaExe)) -or -not (Get-KiwixServeExe)) {
-  Write-Host 'The kit is not set up yet. Double-click SETUP.bat first (needs internet once).' -ForegroundColor Red
+  Write-MissingPlatform
   exit 1
 }
 

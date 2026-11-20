@@ -2,6 +2,7 @@
 . (Join-Path $PSScriptRoot 'common.ps1')
 $ErrorActionPreference = 'Continue'
 Ensure-Dirs
+if ((-not $UseSystemOllama -and -not (Get-OllamaExe)) -or -not (Get-KiwixServeExe)) { Write-MissingPlatform }
 Write-Host 'Stopping the Offline AI Kit...'
 foreach ($n in @('kiwix','ollama','chat-server','add-libraries','add-maps','wikipedia-download')) { Stop-KitProcess $n }
 # Any curl the Wikipedia downloader left behind (only ones writing into this kit's library).

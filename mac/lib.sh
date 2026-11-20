@@ -359,6 +359,7 @@ stage_program_tree() { # stage_program_tree <source dir> <name> -> cache dir tha
     mkdir -p "$dest"
     cp -R "$src/." "$dest/"
     chmod -R u+rx "$dest" 2>/dev/null || true
+    command -v xattr >/dev/null 2>&1 && xattr -dr com.apple.quarantine "$dest" 2>/dev/null || true
     touch "$marker"
     say "  This drive cannot run programs directly. Running $name from $dest."
     say "  Your library and models stay on this drive."
@@ -580,12 +581,13 @@ stop_kit() {
 
 ollama_bin() {
   local c staged
+  clear_quarantine "$OLLAMA_DIR"
   for c in "$OLLAMA_DIR/ollama" "$OLLAMA_DIR/bin/ollama"; do
     [ -f "$c" ] || continue
     if ensure_executable "$c"; then printf '%s\n' "$c"; return 0; fi
   done
   if [ -d "$OLLAMA_DIR" ] && { [ -f "$OLLAMA_DIR/ollama" ] || [ -f "$OLLAMA_DIR/bin/ollama" ]; }; then
-    staged="$(stage_program_tree "$OLLAMA_DIR" "ollama-${KIT_OS:-mac}")"
+    staged="$(stage_program_tree "$OLLAMA_DIR" "ollama-${PLATFORM_ID:-mac}")"
     for c in "$staged/ollama" "$staged/bin/ollama"; do
       [ -f "$c" ] || continue
       chmod +x "$c" 2>/dev/null || true
@@ -596,13 +598,14 @@ ollama_bin() {
 }
 kiwix_bin() {
   local f staged found=""
+  clear_quarantine "$KIWIX_DIR"
   for f in "$KIWIX_DIR"/*/kiwix-serve "$KIWIX_DIR"/kiwix-serve; do
     [ -f "$f" ] || continue
     if ensure_executable "$f"; then printf '%s\n' "$f"; return 0; fi
     found="$f"
   done
   if [ -n "$found" ]; then
-    staged="$(stage_program_tree "$KIWIX_DIR" "kiwix-${KIT_OS:-mac}")"
+    staged="$(stage_program_tree "$KIWIX_DIR" "kiwix-${PLATFORM_ID:-mac}")"
     for f in "$staged"/*/kiwix-serve "$staged"/kiwix-serve; do
       [ -f "$f" ] || continue
       chmod +x "$f" 2>/dev/null || true
@@ -920,24 +923,168 @@ make_linux_desktop() {
   fi
 }
 
-# ---------- Which Kiwix / Ollama build to unpack ----------
-install_kiwix_tools() {
-  local rel kfile want pattern label
-  rel="$KIWIX_BASE/release/kiwix-tools/"
+# ---------- Which computer is this, and where its programs live ----------
+# Keep folder names and the missing-program sentences in step with www/universal.js.
+UNIVERSAL_PROGRAM_GB=8.0
+dir_has_ollama() {
+  [ -f "$1/ollama" ] || [ -f "$1/bin/ollama" ] || [ -f "$1/ollama.exe" ] || [ -f "$1/bin/ollama.exe" ]
+}
+dir_has_kiwix() {
+  local f
+  [ -f "$1/kiwix-serve" ] || [ -f "$1/kiwix-serve.exe" ] && return 0
+  for f in "$1"/*/kiwix-serve "$1"/*/kiwix-serve.exe; do
+    [ -f "$f" ] && return 0
+  done
+  return 1
+}
+legacy_ollama_dir() {
+  if [ "${KIT_OS:-mac}" = linux ]; then printf '%s\n' "$RUNTIME/linux-ollama"; return; fi
+  if [ "$OLLAMA_CHANNEL" = pinned ]; then printf '%s\n' "$RUNTIME/mac-ollama-$OLLAMA_PIN_VERSION"
+  else printf '%s\n' "$RUNTIME/mac-ollama"; fi
+}
+legacy_kiwix_dir() {
   if [ "${KIT_OS:-mac}" = linux ]; then
-    if [ "$LINUX_LIBC" = musl ]; then pattern="kiwix-tools_linux-${LINUX_KIWIX_ARCH}-musl-[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9]+)?\\.tar\\.gz"
-    else pattern="kiwix-tools_linux-${LINUX_KIWIX_ARCH}-[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9]+)?\\.tar\\.gz"; fi
-    label="Linux $LINUX_KIWIX_ARCH $LINUX_LIBC"
-  else
-    pattern="kiwix-tools_macos-${KIWIX_ARCH}-[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9]+)?\\.tar\\.gz"
-    label="macOS $KIWIX_ARCH"
+    if [ "$LINUX_CPU" = arm ]; then printf '%s\n' "$RUNTIME/linux-kiwix-arm"; else printf '%s\n' "$RUNTIME/linux-kiwix"; fi
+    return
   fi
-  say "[1/4] Library program (kiwix-tools for $label)..."
-  if kiwix_bin >/dev/null; then ok "  Already installed."; return 0; fi
+  if [ "$MAC_ARCH" = x86_64 ]; then printf '%s\n' "$RUNTIME/mac-kiwix-intel"; else printf '%s\n' "$RUNTIME/mac-kiwix"; fi
+}
+libc_file_matches() { # libc_file_matches <platform id>
+  local f="$RUNTIME/$1/LIBC" got
+  [ "${KIT_OS:-mac}" = linux ] || return 0
+  [ -f "$f" ] || return 0
+  got="$(tr -d '[:space:]' < "$f")"
+  [ -z "$got" ] || [ "$got" = "$LINUX_LIBC" ]
+}
+select_runtime_dirs() {
+  local new_o new_k leg_o leg_k
+  if [ -n "${OFFLINE_AI_PLATFORM:-}" ]; then PLATFORM_ID="$OFFLINE_AI_PLATFORM"
+  elif [ "${KIT_OS:-mac}" = linux ]; then
+    if [ "$LINUX_CPU" = arm ]; then PLATFORM_ID=linux-arm64; else PLATFORM_ID=linux-x64; fi
+  elif [ "$MAC_ARCH" = x86_64 ]; then PLATFORM_ID=mac-x64
+  else PLATFORM_ID=mac-arm64
+  fi
+  if [ "${KIT_OS:-mac}" != linux ] && [ "$OLLAMA_CHANNEL" = pinned ]; then new_o="$RUNTIME/$PLATFORM_ID/ollama-$OLLAMA_PIN_VERSION"
+  else new_o="$RUNTIME/$PLATFORM_ID/ollama"; fi
+  new_k="$RUNTIME/$PLATFORM_ID/kiwix"
+  leg_o="$(legacy_ollama_dir)"
+  leg_k="$(legacy_kiwix_dir)"
+  if dir_has_ollama "$new_o"; then OLLAMA_DIR="$new_o"
+  elif dir_has_ollama "$leg_o"; then OLLAMA_DIR="$leg_o"
+  else OLLAMA_DIR="$new_o"; fi
+  if dir_has_kiwix "$new_k" && libc_file_matches "$PLATFORM_ID"; then KIWIX_DIR="$new_k"
+  elif dir_has_kiwix "$leg_k"; then KIWIX_DIR="$leg_k"
+  else KIWIX_DIR="$new_k"; fi
+}
+clear_quarantine() {
+  command -v xattr >/dev/null 2>&1 || return 0
+  [ "$(uname -s)" = Darwin ] || return 0
+  [ -e "$1" ] || return 0
+  xattr -dr com.apple.quarantine "$1" 2>/dev/null || true
+}
+unpack_archive() { # unpack_archive <archive> <dest>
+  local file="$1" dest="$2"
+  mkdir -p "$dest"
+  case "$file" in
+    *.zip)
+      if command -v unzip >/dev/null 2>&1 && unzip -q -o "$file" -d "$dest"; then return 0; fi
+      if tar -xf "$file" -C "$dest" 2>/dev/null; then return 0; fi
+      if command -v python3 >/dev/null 2>&1 && python3 -c 'import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$file" "$dest"; then return 0; fi
+      err "Could not unpack $file (need unzip, tar, or python3)."
+      return 1
+      ;;
+    *)
+      tar -xf "$file" -C "$dest" 2>/dev/null && return 0
+      tar --zstd -xf "$file" -C "$dest" 2>/dev/null && return 0
+      if command -v zstd >/dev/null 2>&1 && zstd -dc "$file" | tar -xf - -C "$dest"; then return 0; fi
+      err "Could not unpack $file. Install the zstd package and run setup again."
+      return 1
+      ;;
+  esac
+}
+missing_program_message() {
+  local id="${1:-${PLATFORM_ID:-}}" who setup folder
+  case "$id" in
+    windows-x64) who="Windows (64-bit)" ;;
+    windows-arm64) who="Windows on ARM" ;;
+    windows-x86) who="32-bit Windows" ;;
+    mac-arm64) who="a Mac with an Apple chip" ;;
+    mac-x64) who="an Intel Mac" ;;
+    linux-x64) who="64-bit Linux" ;;
+    linux-arm64) who="Linux on ARM" ;;
+    *) who="this computer" ;;
+  esac
+  case "$id" in
+    mac-*) setup="SETUP-MAC.command" ;;
+    linux-*) setup="bash SETUP-LINUX.sh" ;;
+    *) setup="SETUP.bat" ;;
+  esac
+  folder="runtime/${id:-windows-x64}"
+  say "This drive does not have the Offline AI programs for $who (folder $folder)."
+  say "The library, models and maps on the drive are shared, and they are still here."
+  say "Connect this computer to the internet and run $setup, then choose All computers (universal drive)."
+  say "You can also choose This computer only, which adds just this computer's programs."
+  if [ "$id" = windows-arm64 ] || [ "$id" = windows-x86 ]; then
+    say "The Windows programs in this kit are for 64-bit Intel and AMD PCs (runtime/windows-x64)."
+  fi
+  if [ "${KIT_OS:-mac}" = linux ] && [ -f "$RUNTIME/$PLATFORM_ID/LIBC" ]; then
+    local got
+    got="$(tr -d '[:space:]' < "$RUNTIME/$PLATFORM_ID/LIBC")"
+    if [ -n "$got" ] && [ "$got" != "$LINUX_LIBC" ]; then
+      say "The programs in runtime/$PLATFORM_ID were built for $got. This computer uses $LINUX_LIBC."
+      say "Connect to the internet and run bash SETUP-LINUX.sh on this computer to add the matching programs."
+    fi
+  fi
+}
+programs_missing() {
+  if [ "${KIT_OS:-mac}" = linux ] && [ -f "$RUNTIME/$PLATFORM_ID/LIBC" ]; then
+    local got
+    got="$(tr -d '[:space:]' < "$RUNTIME/$PLATFORM_ID/LIBC")"
+    if [ -n "$got" ] && [ "$got" != "$LINUX_LIBC" ] && [ "$KIWIX_DIR" = "$RUNTIME/$PLATFORM_ID/kiwix" ]; then return 0; fi
+  fi
+  dir_has_kiwix "$KIWIX_DIR" || return 0
+  if [ "$AI_AVAILABLE" = yes ] && [ "$USE_SYSTEM_OLLAMA" != yes ]; then
+    dir_has_ollama "$OLLAMA_DIR" || return 0
+  fi
+  return 1
+}
+universal_extra_gb() {
+  # Mac and Linux estimates already include about 1 GB for this computer's programs.
+  local mine=1.0
+  case "${PLATFORM_ID:-}" in
+    windows-x64|windows-arm64|windows-x86) mine=2.5 ;;
+  esac
+  awk -v u="$UNIVERSAL_PROGRAM_GB" -v m="$mine" 'BEGIN { printf "%.1f", u - m }'
+}
+ollama_sha_for() { # ollama_sha_for <sha256sum text> <asset>
+  printf '%s\n' "$1" | tr -d '\r' | awk -v a="$2" '{ h=$1; f=$2; sub(/^\*/, "", f); sub(/^\.\//, "", f); if (f == a) { print h; exit } }'
+}
+
+# ---------- Which Kiwix / Ollama build to unpack ----------
+install_kiwix_tools() { # [dest] [filename-regex] [label] [libc]
+  local dest pattern label libc rel kfile want
+  rel="$KIWIX_BASE/release/kiwix-tools/"
+  if [ $# -ge 2 ]; then
+    dest="$1"; pattern="$2"; label="${3:-programs}"; libc="${4:-}"
+  else
+    dest="$KIWIX_DIR"; libc=""
+    if [ "${KIT_OS:-mac}" = linux ]; then
+      if [ "$LINUX_LIBC" = musl ]; then pattern="kiwix-tools_linux-${LINUX_KIWIX_ARCH}-musl-[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9]+)?\\.tar\\.gz"
+      else pattern="kiwix-tools_linux-${LINUX_KIWIX_ARCH}-[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9]+)?\\.tar\\.gz"; fi
+      label="Linux $LINUX_KIWIX_ARCH $LINUX_LIBC"
+      libc="$LINUX_LIBC"
+    else
+      pattern="kiwix-tools_macos-${KIWIX_ARCH}-[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9]+)?\\.tar\\.gz"
+      label="macOS $KIWIX_ARCH"
+    fi
+    say "[1/4] Library program (kiwix-tools for $label)..."
+  fi
+  [ $# -ge 2 ] && say "  Library program (kiwix-tools for $label)..."
+  if dir_has_kiwix "$dest"; then ok "  Already installed."; return 0; fi
   kfile="$(curl_text "$rel" | grep -oE "href=\"${pattern}\"" | sed -e 's/^href="//' -e 's/"$//' |
     awk '{ v = $0
-           if (match(v, /[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?\.tar\.gz$/)) {
-             ver = substr(v, RSTART, RLENGTH); sub(/\.tar\.gz$/, "", ver); gsub(/-/, ".", ver)
+           if (match(v, /[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?\.(tar\.gz|zip)$/)) {
+             ver = substr(v, RSTART, RLENGTH); sub(/\.(tar\.gz|zip)$/, "", ver); gsub(/-/, ".", ver)
              n = split(ver, p, ".")
              printf "%05d%05d%05d%05d %s\n", p[1], p[2], p[3], (n > 3 ? p[4] : 0), $0
            } }' | sort | tail -1 | awk '{ print $2 }')"
@@ -946,42 +1093,124 @@ install_kiwix_tools() {
   download_resumable "$rel$kfile" "$RUNTIME/$kfile" 0 "$kfile" no 20 || return 1
   want="$(curl_text "$rel$kfile.md5" | awk '{ print $1 }')"
   if [ "$(md5_of "$RUNTIME/$kfile")" != "$want" ]; then rm -f "$RUNTIME/$kfile"; err "kiwix-tools download was damaged (checksum mismatch). Run setup again."; return 1; fi
-  mkdir -p "$KIWIX_DIR"
-  tar -xzf "$RUNTIME/$kfile" -C "$KIWIX_DIR" 2>/dev/null || tar -xzf "$RUNTIME/$kfile" -C "$KIWIX_DIR"
+  rm -rf "$dest"
+  mkdir -p "$dest"
+  unpack_archive "$RUNTIME/$kfile" "$dest" || { rm -f "$RUNTIME/$kfile"; return 1; }
   rm -f "$RUNTIME/$kfile"
-  materialize_symlinks "$KIWIX_DIR"
-  command -v xattr >/dev/null 2>&1 && xattr -dr com.apple.quarantine "$KIWIX_DIR" 2>/dev/null || true
+  materialize_symlinks "$dest"
+  clear_quarantine "$dest"
+  case "$dest" in
+    "$RUNTIME/linux-x64/kiwix"|"$RUNTIME/linux-arm64/kiwix")
+      [ -n "$libc" ] && printf '%s\n' "$libc" > "$(dirname "$dest")/LIBC" ;;
+  esac
+  dir_has_kiwix "$dest" || { err "kiwix-tools for $label did not unpack as expected."; return 1; }
+  ok "  Installed."
+  select_runtime_dirs
+}
+install_one_ollama() { # install_one_ollama <dest> <asset> <base-url> [pinned]
+  local dest="$1" asset="$2" base="$3" pin="${4:-}" sums want archive
+  if dir_has_ollama "$dest"; then ok "  Already installed."; return 0; fi
+  sums="$(curl_text "${base}sha256sum.txt" || true)"
+  want="$(ollama_sha_for "$sums" "$asset")"
+  if [ -z "$want" ] && [ "${asset%.tgz}" != "$asset" ]; then
+    asset="${asset%.tgz}.tar.zst"
+    say "  Using $asset (this release has no .tgz)."
+    want="$(ollama_sha_for "$sums" "$asset")"
+  fi
+  if [ -z "$want" ]; then err "Could not read the Ollama checksum list."; return 1; fi
+  if [ "$pin" = yes ] && [ "$want" != "$OLLAMA_PIN_SHA256" ]; then
+    err "The Ollama $OLLAMA_PIN_VERSION checksum online does not match the one built into this kit. Not installing it."; return 1
+  fi
+  archive="$RUNTIME/$asset"
+  download_resumable "$base$asset" "$archive" 0 "$asset" no 20 || return 1
+  if [ "$(sha256_of "$archive")" != "$want" ]; then rm -f "$archive"; err "Ollama download was damaged (checksum mismatch). Run setup again."; return 1; fi
+  rm -rf "$dest"
+  mkdir -p "$dest"
+  unpack_archive "$archive" "$dest" || { rm -f "$archive"; return 1; }
+  rm -f "$archive"
+  materialize_symlinks "$dest"
+  clear_quarantine "$dest"
+  dir_has_ollama "$dest" || { err "Ollama did not unpack as expected."; return 1; }
   ok "  Installed."
 }
+install_darwin_copies() { # install_darwin_copies current|pinned  (real copies in both Mac folders)
+  local channel="$1" destname asset base pin tmp archive id dest sums want
+  destname="ollama"
+  asset="ollama-darwin.tgz"
+  base="https://github.com/ollama/ollama/releases/latest/download/"
+  pin=""
+  if [ "$channel" = pinned ]; then
+    destname="ollama-$OLLAMA_PIN_VERSION"
+    base="https://github.com/ollama/ollama/releases/download/$OLLAMA_PIN_VERSION/"
+    pin=yes
+  fi
+  if dir_has_ollama "$RUNTIME/mac-arm64/$destname" && dir_has_ollama "$RUNTIME/mac-x64/$destname"; then
+    ok "  Mac AI program ($destname) already installed for both chips."; return 0
+  fi
+  sums="$(curl_text "${base}sha256sum.txt" || true)"
+  want="$(ollama_sha_for "$sums" "$asset")"
+  [ -n "$want" ] || { err "Could not read the Ollama checksum list for the Mac build."; return 1; }
+  if [ "$pin" = yes ] && [ "$want" != "$OLLAMA_PIN_SHA256" ]; then
+    err "The Ollama $OLLAMA_PIN_VERSION checksum online does not match the one built into this kit. Not installing it."; return 1
+  fi
+  archive="$RUNTIME/ollama-darwin-$channel.tgz"
+  download_resumable "$base$asset" "$archive" 0 "Mac $asset" no 20 || return 1
+  if [ "$(sha256_of "$archive")" != "$want" ]; then rm -f "$archive"; err "Ollama for Mac was damaged (checksum mismatch). Run setup again."; return 1; fi
+  tmp="$RUNTIME/_unpack-darwin-$channel"
+  rm -rf "$tmp"
+  mkdir -p "$tmp"
+  unpack_archive "$archive" "$tmp" || { rm -rf "$tmp" "$archive"; return 1; }
+  rm -f "$archive"
+  materialize_symlinks "$tmp"
+  for id in mac-arm64 mac-x64; do
+    dest="$RUNTIME/$id/$destname"
+    if dir_has_ollama "$dest"; then ok "  Already installed: runtime/$id/$destname"; continue; fi
+    rm -rf "$dest"
+    mkdir -p "$dest"
+    cp -R "$tmp/." "$dest/"
+    materialize_symlinks "$dest"
+    clear_quarantine "$dest"
+    ok "  Installed runtime/$id/$destname"
+  done
+  rm -rf "$tmp"
+}
+install_universal_programs() {
+  local base
+  if [ "$TEST_MODE" = yes ]; then warn "TEST MODE: not downloading programs for other computers."; return 0; fi
+  say "All computers (universal drive): programs for Windows, Mac and Linux."
+  say "Models, Wikipedia, extra libraries and maps stay one shared copy."
+  base="https://github.com/ollama/ollama/releases/latest/download/"
+  install_kiwix_tools "$RUNTIME/windows-x64/kiwix" 'kiwix-tools_win-x86_64-[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?\.zip' "Windows x64" "" || return 1
+  install_kiwix_tools "$RUNTIME/mac-arm64/kiwix" 'kiwix-tools_macos-arm64-[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?\.tar\.gz' "macOS Apple chip" "" || return 1
+  install_kiwix_tools "$RUNTIME/mac-x64/kiwix" 'kiwix-tools_macos-x86_64-[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?\.tar\.gz' "macOS Intel" "" || return 1
+  install_kiwix_tools "$RUNTIME/linux-x64/kiwix" 'kiwix-tools_linux-x86_64-[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?\.tar\.gz' "Linux 64-bit PC" glibc || return 1
+  install_kiwix_tools "$RUNTIME/linux-arm64/kiwix" 'kiwix-tools_linux-aarch64-[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?\.tar\.gz' "Linux ARM" glibc || return 1
+  install_darwin_copies current || return 1
+  install_darwin_copies pinned || return 1
+  install_one_ollama "$RUNTIME/windows-x64/ollama" "ollama-windows-amd64.zip" "$base" "" || return 1
+  install_one_ollama "$RUNTIME/linux-x64/ollama" "ollama-linux-amd64.tgz" "$base" "" || return 1
+  install_one_ollama "$RUNTIME/linux-arm64/ollama" "ollama-linux-arm64.tgz" "$base" "" || return 1
+  select_runtime_dirs
+}
 install_portable_ollama() {
-  local asset base want
+  local asset base pin=""
   if [ "${KIT_OS:-mac}" = linux ]; then say "[2/4] AI program (Ollama for Linux, portable)..."
   else say "[2/4] AI program (Ollama for macOS, portable)..."; fi
   if [ "$USE_SYSTEM_OLLAMA" = yes ]; then say "  Using your own Ollama on port $OLLAMA_PORT (USE_SYSTEM_OLLAMA) - not downloading one."; return 0; fi
   if [ "${KIT_OS:-mac}" != linux ] && [ "$AI_AVAILABLE" != yes ]; then warn "  Skipped: needs macOS 13 (Ventura) or newer (this Mac has $MACOS_VER)."; return 0; fi
-  if ollama_bin >/dev/null; then ok "  Already installed."; return 0; fi
+  if dir_has_ollama "$OLLAMA_DIR"; then ok "  Already installed."; return 0; fi
   if [ "${KIT_OS:-mac}" = linux ]; then
     asset="$LINUX_OLLAMA_ASSET"
     base="https://github.com/ollama/ollama/releases/latest/download/"
   else
     asset="ollama-darwin.tgz"
-    if [ "$OLLAMA_CHANNEL" = pinned ]; then base="https://github.com/ollama/ollama/releases/download/$OLLAMA_PIN_VERSION/"
+    if [ "$OLLAMA_CHANNEL" = pinned ]; then
+      base="https://github.com/ollama/ollama/releases/download/$OLLAMA_PIN_VERSION/"
+      pin=yes
     else base="https://github.com/ollama/ollama/releases/latest/download/"; fi
   fi
-  download_resumable "$base$asset" "$RUNTIME/$asset" 0 "$asset" no 20 || return 1
-  want="$(curl_text "${base}sha256sum.txt" | tr -d '\r' | awk -v a="$asset" '$2 == a || $2 == "./" a { print $1 }')"
-  if [ -z "$want" ]; then err "Could not read the Ollama checksum list."; return 1; fi
-  if [ "${KIT_OS:-mac}" != linux ] && [ "$OLLAMA_CHANNEL" = pinned ] && [ "$want" != "$OLLAMA_PIN_SHA256" ]; then
-    rm -f "$RUNTIME/$asset"; err "The Ollama $OLLAMA_PIN_VERSION checksum online does not match the one built into this kit. Not installing it."; return 1
-  fi
-  if [ "$(sha256_of "$RUNTIME/$asset")" != "$want" ]; then rm -f "$RUNTIME/$asset"; err "Ollama download was damaged (checksum mismatch). Run setup again."; return 1; fi
-  mkdir -p "$OLLAMA_DIR"
-  tar -xzf "$RUNTIME/$asset" -C "$OLLAMA_DIR" 2>/dev/null || tar -xzf "$RUNTIME/$asset" -C "$OLLAMA_DIR"
-  rm -f "$RUNTIME/$asset"
-  materialize_symlinks "$OLLAMA_DIR"
-  command -v xattr >/dev/null 2>&1 && xattr -dr com.apple.quarantine "$OLLAMA_DIR" 2>/dev/null || true
-  ollama_bin >/dev/null || { err "Ollama did not unpack as expected."; return 1; }
-  ok "  Installed."
+  install_one_ollama "$OLLAMA_DIR" "$asset" "$base" "$pin" || return 1
+  select_runtime_dirs
 }
 
 # ---------- Check for updates (only when asked; needs internet; never downloads or changes anything) ----------
@@ -1024,3 +1253,4 @@ pause_exit() { # keep a double-clicked Terminal window readable
   if [ -t 0 ]; then printf '\n'; read -r -p "Press Return to close this window. " _ || true; fi
   exit "$code"
 }
+select_runtime_dirs

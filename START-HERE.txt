@@ -164,6 +164,20 @@ still work when the internet or power is out.
  the drive letter changes, run START from the USB again.
  START rewrites the Desktop shortcut.
 
+ To use ONE drive on every computer, run SETUP (not Easy
+ Install) and choose "All computers (universal drive)".
+ That downloads the programs for Windows, Mac (Apple chip
+ and Intel) and Linux (64-bit PC and ARM). The library,
+ models and maps are stored once. The summary shows the
+ extra disk space before anything downloads (about 5.5 GB
+ more on Windows, about 7 GB more on a Mac or Linux).
+
+ START picks the matching programs by itself
+ (runtime/windows-x64, runtime/mac-arm64, runtime/mac-x64,
+ runtime/linux-x64 or runtime/linux-arm64). If this
+ computer's programs are not on the drive, START says so
+ and tells you to run SETUP while you have internet.
+
  On a Mac or Linux, if the drive will not run programs
  (common on exFAT), start with bash and the file name, for
  example:

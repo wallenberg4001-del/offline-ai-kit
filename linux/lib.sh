@@ -4,7 +4,7 @@
 # Program downloads (glibc unless `ldd --version` says musl):
 #   kiwix-tools_linux-x86_64-*.tar.gz or kiwix-tools_linux-aarch64-*.tar.gz
 #   kiwix-tools_linux-x86_64-musl-*.tar.gz or kiwix-tools_linux-aarch64-musl-*.tar.gz
-#   ollama-linux-amd64.tgz or ollama-linux-arm64.tgz  (bin/ollama plus lib/ollama)
+#   ollama-linux-amd64.tgz or ollama-linux-arm64.tgz (or .tar.zst when that is what the release ships)
 # LAN address: `ip route get 1.1.1.1` and the src address (not the gateway).
 export OFFLINE_AI_OS=linux
 # shellcheck source=../mac/lib.sh
