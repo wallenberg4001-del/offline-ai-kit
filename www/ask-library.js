@@ -24,6 +24,10 @@
     "own please same she should so some such tell than that the their them then there these they this those through to too under " +
     "until up us use used using very want was way we were what when where which while who whom why will with would you your yours " +
     "best good need needs thing things something someone anything help explain describe show give find info information").split(" ");
+  // Words that help the text search but say little about which article is right ("treat", "stop", "signs").
+  var WEAK = {};
+  ("treat treating treatment treatments fix fixing repair stop stopping cause causes sign signs symptom symptoms way ways " +
+   "tip tips safe safely quick quickly mild severe heavy bad deal prevent prevention care step steps long time").split(" ").forEach(function (w) { WEAK[w] = true; });
   var STOPSET = {};
   STOP.forEach(function (w) { STOPSET[w] = true; });
 
@@ -215,7 +219,8 @@
     "You answer questions using ONLY the numbered library sources given to you.",
     "Put the source number in square brackets after each sentence that uses it, like [1] or [2]. Use only the numbers of the sources given.",
     "Do not add facts, numbers, doses, links or sources that are not in the sources. Do not write a list of sources at the end.",
-    "If the sources do not answer the question, reply with exactly: NOT_IN_LIBRARY",
+    "If the sources answer only part of the question, answer that part and say what the sources do not cover.",
+    "Only if the sources say nothing useful about the question, reply with exactly: NOT_IN_LIBRARY",
     "Write clear, practical, step-by-step advice in plain language. Flag dangers.",
     "For medical, first-aid or medication questions: be cautious, never invent doses, and say when to get emergency help or a professional.",
     "You are running offline on this computer, possibly during an outage."
@@ -227,7 +232,7 @@
     });
     var user = "LIBRARY SOURCES:\n\n" + parts.join("\n\n") +
       "\n\nQUESTION: " + question +
-      "\n\nAnswer using only sources [1] to [" + sources.length + "], with the [number] after each sentence. If they do not answer the question, reply NOT_IN_LIBRARY.";
+      "\n\nAnswer using only sources [1] to [" + sources.length + "], with the [number] after each sentence. If they say nothing useful about the question, reply NOT_IN_LIBRARY.";
     return [{ role: "system", content: SYSTEM_LIBRARY }, { role: "user", content: user }];
   }
 
@@ -290,6 +295,8 @@
     var self = this;
     var kws = keywords(question).slice(0, 6);
     var stems = kws.map(stem);
+    var strong = kws.filter(function (w) { return !WEAK[w]; }).map(stem);
+    if (!strong.length) strong = stems;
     if (!kws.length) return Promise.resolve({ keywords: kws, stems: stems, results: [], searched: 0 });
     var booksP = self.books ? Promise.resolve(self.books) : self.loadBooks();
     return booksP.then(function (books) {
@@ -339,13 +346,13 @@
         all.forEach(function (r) {
           var t = r.title.toLowerCase();
           var tWords = t.split(/[^a-z0-9]+/).filter(Boolean);
-          var covered = tWords.filter(function (w) { return stems.some(function (s) { return w.indexOf(s) === 0; }); }).length;
-          r.titleHits = countHits(t, stems);
+          var covered = tWords.filter(function (w) { return strong.some(function (s) { return w.indexOf(s) === 0; }); }).length;
+          r.titleHits = countHits(t, strong);
           r.score += r.titleHits * 1.5 + (tWords.length ? covered / tWords.length : 0) * 2.5
                     - (/^(list|index|outline|glossary|timeline) of\b/i.test(r.title) ? 3 : 0) - (/^(home|main page|index)$/i.test(r.title) ? 4 : 0) - (/\(disambiguation\)/i.test(r.title) ? 6 : 0);
         });
         all.sort(function (a, b) { return b.score - a.score; });
-        return { keywords: kws, stems: stems, results: all, searched: searchable.length, books: books };
+        return { keywords: kws, stems: stems, strong: strong, results: all, searched: searchable.length, books: books };
       });
     });
   };
@@ -371,7 +378,7 @@
         var title = titleMatch ? decodeEntities(titleMatch).trim() : r.title;
         var url = pg.url && pg.url.indexOf(self.base + "/content/") === 0 ? pg.url : self.url(r.path);
         return { title: title || r.title, book: r.book, path: url.slice(self.base.length), url: url, text: sel.text,
-                 distinct: distinct, titleHits: Math.max(r.titleHits || 0, countHits(title, found.stems)), score: r.score };
+                 distinct: distinct, titleHits: Math.max(r.titleHits || 0, countHits(title, found.strong || found.stems)), score: r.score };
       }).catch(function () { return null; });
     })).then(function (arts) {
       var seen = {};

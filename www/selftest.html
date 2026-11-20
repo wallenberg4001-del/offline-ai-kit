@@ -32,7 +32,7 @@ It takes up to a few minutes on a slow computer.</p>
     if (!kv) return; var i = kv.indexOf("="); var k = i < 0 ? kv : kv.slice(0, i); var v = i < 0 ? "" : kv.slice(i + 1);
     try { params[decodeURIComponent(k)] = decodeURIComponent(v.replace(/\+/g, " ")); } catch (e) { /* ignore */ }
   });
-  var QUESTION = params.q || "How do I stop heavy bleeding from a cut?";
+  var QUESTION = params.q || "How do I treat mild hypothermia?";
   var NONSENSE = "zxqv flurbington glorpwhistle quarbleflix";
   var PREFERRED = ["qwen3.5:9b", "qwen3:8b", "qwen3:14b", "gemma3:12b", "gemma3:4b", "phi4-mini", "llama3.2:3b", "medgemma:4b"];
   var report = { started: new Date().toISOString(), page: location.protocol + "//" + location.host + location.pathname, question: QUESTION, steps: [] };

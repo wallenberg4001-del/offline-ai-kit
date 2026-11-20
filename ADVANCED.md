@@ -181,7 +181,7 @@ that header, the chat says it can't reach the library; untick **Ask the library*
 
 **Self-test page.** With the kit running, open `www/selftest.html` (Windows: http://127.0.0.1:8091/selftest.html;
 Mac: double-click `www/selftest.html` or drag it into the browser). It checks, with the real library and model:
-the catalog is readable, a question gets an answer whose sources all open (HTTP 200), a nonsense question gives
+the catalog is readable, a question (default: "How do I treat mild hypothermia?") gets an answer whose sources all open (HTTP 200), a nonsense question gives
 "not in the library", and a forged `[n]` and a fake link are removed. Add `#q=your question` to try another question,
 or `#model=llama3.2:3b` to pick the model. Automated tests can add `#report=http://127.0.0.1:PORT/` to receive the
 JSON result by POST (127.0.0.1 only).
