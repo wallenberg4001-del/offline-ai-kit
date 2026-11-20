@@ -219,7 +219,7 @@ Write-Host ("  Full Wikipedia:   {0}" -f $(if ($wantWiki) { 'Yes - about ' + (Fo
 Write-Host ("  Extra libraries:  {0}" -f $(if ($extraSel.Count) { (($extraSel | ForEach-Object { $_.Id }) -join ', ') + ' (' + (Format-Size $extraGB) + ')' } else { 'none' }))
 Write-Host ("  Share on Wi-Fi:   {0}" -f $(if ($shareChoice) { 'ON (trusted home Wi-Fi only)' } else { 'off' }))
 $totalGB = $estGB; if ($wantWiki) { $totalGB += $WikipediaGB }
-Write-Host ("  Download now:     about {0:N1} GB   (with Wikipedia later: about {1:N0} GB in total)" -f $estGB, $totalGB)
+Write-Host ("  Download now:     about {0:N1} GB   (with Wikipedia later: about {1:N1} GB in total)" -f $estGB, $totalGB)
 Write-Host ("  Free space:       {0} on this drive" -f (Format-GB $free))
 if ($free -lt ($estGB * 1e9)) { Write-Host 'Not enough free space for these choices. Free up space, pick fewer extras or a smaller model size, or choose another drive.' -ForegroundColor Red; exit 1 }
 if ($wantWiki -and -not $TestMode -and $free -lt (($estGB + 140) * 1e9)) { Write-Host 'WARNING: there will not be enough room for full Wikipedia (~127 GB) on this drive.' -ForegroundColor Yellow }

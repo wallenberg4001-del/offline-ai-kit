@@ -226,7 +226,7 @@ fi
 lib_gb=11.2; [ "$TIER" = essentials ] && lib_gb=3.8; [ "$TIER" = test ] && lib_gb=0.2
 EXTRA_GB="$(extra_gb "$EXTRA_SEL")"
 est="$(awk -v l="$lib_gb" -v m="$(models_gb "$MODEL_LIST")" -v x="$EXTRA_GB" 'BEGIN { printf "%.1f", 0.5 + l + m + x + 0.5 }')"
-total="$est"; [ "$WANT_WIKI" = yes ] && total="$(awk -v a="$est" -v b="$WIKIPEDIA_GB" 'BEGIN { printf "%.0f", a + b }')"
+total="$est"; [ "$WANT_WIKI" = yes ] && total="$(awk -v a="$est" -v b="$WIKIPEDIA_GB" 'BEGIN { printf "%.1f", a + b }')"
 if [ "$EASY" = yes ]; then say ""; else step "$WIZARD_STEPS" "Summary"; fi
 say "  AI models:        ${MODEL_LIST:-none (AI needs macOS 13+)}"
 say "  Core library:     $TIER"

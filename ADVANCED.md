@@ -7,7 +7,7 @@ For people comfortable with a terminal. Normal users: use **EASY-INSTALL** or **
 | Version | Windows | Mac | What it does |
 |---|---|---|---|
 | **Easy** | `EASY-INSTALL (Windows).bat` | `EASY-INSTALL (Mac).command` (Apple chip and Intel) | No questions. Detects memory, graphics card and free disk space, picks a hardware profile, installs into the kit folder, adds an **Offline AI** shortcut to the Desktop, starts the kit and opens the browser. If the disk is short it drops to a smaller profile and/or skips Wikipedia instead of failing. |
-| **Standard** | `SETUP.bat` | `SETUP-MAC.command` | Menus: folder, library tier, model set (suggested from the hardware), and – on lighter machines or small disks – whether to include Wikipedia. |
+| **Setup Wizard** | `SETUP.bat` | `SETUP-MAC.command` | Folder, then 6 steps: AI model size (suggested from the hardware), core library tier, full Wikipedia yes/no, Extra Libraries, Share on Wi-Fi, and a summary (download size vs free space) with `Proceed? (Y/N)`. Nothing downloads before that. Choices are saved in `kit-settings.ini`. |
 | **Advanced** | `scripts\setup.ps1` with options | `mac/setup.sh` with options | Everything below, plus `kit-settings.ini`. |
 
 ## Hardware profiles
@@ -86,7 +86,11 @@ powershell -ExecutionPolicy Bypass -File scripts\setup.ps1 [options]
   -Yes                      accept every default (unattended)
   -Test                     quick test install (see Test mode)
   -DetectOnly               only show the hardware check and chosen profile
+  -ShareWifi                turn on Share on Wi-Fi (saved as SHARE_ON_WIFI=1)
+  -ExtraLibraries id,id     also download these Extra Libraries (ids or numbers from the list, or "all")
 ```
+
+Any option given on the command line skips that wizard question. `-Easy` (and `-Yes`) never ask anything.
 
 Mac (Terminal, from the kit folder):
 
@@ -96,6 +100,19 @@ bash mac/setup.sh [options]
   --models lite|8|16|24|32   or  --models "qwen3.5:9b,llama3.2:3b"
   --zims id,id  --path /Volumes/SSD/OfflineAI  --skip-wikipedia  --with-wikipedia
   --use-system-ollama  --no-start  --yes  --test  --detect-only
+  --share-wifi  --extra-libraries id,id|all
+```
+
+**Scripted wizard answers.** Without `--yes`/`-Easy`, the wizard reads one answer per line from standard input when it
+is not a terminal (end of input = the suggested answer). The order is: folder, AI model size, core library,
+Wikipedia (Y/N), Extra Libraries, Share on Wi-Fi (Y/N), Proceed (Y/N), Start now (Y/N):
+
+```bash
+printf '\n16\n2\nY\n1\nN\nY\nN\n' | bash mac/setup.sh --test
+```
+```bat
+rem Windows (cmd), answers.txt holds one answer per line
+type answers.txt | powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup.ps1 -Test
 ```
 
 Example – unattended Mac install to an external SSD with three models and no Wikipedia:
@@ -118,7 +135,9 @@ SETUP and START. Command-line options win over the file.
 | `SKIP_WIKIPEDIA` | `no` | `yes` = never start the 127 GB download (Easy/SETUP may set this for you) |
 | `LIBRARY_PORT` | `8090` | Kiwix library port |
 | `OLLAMA_PORT` | `11435` (`11434` with system Ollama) | AI server port |
-| `CHAT_PORT` | `8091` | Windows chat page server port |
+| `CHAT_PORT` | `8091` | chat page server port (Windows always; Mac only with Share on Wi-Fi) |
+| `SHARE_ON_WIFI` | `0` | `1` = Share on Wi-Fi (library + chat page on the home network; the AI server stays on 127.0.0.1) |
+| `EXTRA_LIBRARIES` | – | written by setup as a record of the Extra Libraries you chose (informational) |
 | `USE_SYSTEM_OLLAMA` | `no` | `yes` = don't download/start/stop the kit's Ollama; use yours |
 | `MAC_ARCH` | (detected) | Mac only: `arm64` or `x86_64` to override the chip detection |
 
@@ -136,6 +155,66 @@ leave it alone. Make sure it is running. On **Mac** the chat page is opened as a
 allow that origin: quit Ollama, run `launchctl setenv OLLAMA_ORIGINS "*"`, and start Ollama again. (On Windows
 the chat page is served from `http://127.0.0.1:8091`, which Ollama allows by default.)
 
+## Share on Wi-Fi (how it works)
+
+Off by default (`SHARE_ON_WIFI=0`): Kiwix, Ollama and the chat page listen on `127.0.0.1` only. With `SHARE_ON_WIFI=1`:
+
+| Part | Listens on | Notes |
+|---|---|---|
+| Ollama (the kit's AI server) | **`127.0.0.1:11435` always** | never exposed to the network |
+| Kiwix library | `0.0.0.0:8090` | so citation links open on the phone (`http://<lan-ip>:8090/content/...`) |
+| Chat page server | `0.0.0.0:8091` | serves `www/`, `/status.json`, and `/ollama/api/...` → `127.0.0.1:11435` |
+
+- The `/ollama/` proxy only passes `GET /api/tags`, `/api/version`, `/api/ps` and `POST /api/chat`, `/api/generate`,
+  `/api/show`, `/api/embed(dings)`. Pulling, deleting, copying or creating models returns 403. Responses are copied
+  through byte for byte as they arrive, so streamed answers stay streamed.
+- The page decides where to send requests (`AskLibrary.endpoints()` in `www/ask-library.js`): opened as a file or from
+  `127.0.0.1`/`localhost` it talks to `127.0.0.1` directly; opened from any other host name (a phone) it uses
+  `http://<that host>:8091/ollama` and `http://<that host>:8090`.
+- **Windows:** `scripts\serve-chat.ps1` uses a `TcpListener` (binding `0.0.0.0` needs no admin rights, unlike
+  `HttpListener`) and a pool of worker threads. Windows Firewall decides whether other devices get through: allow
+  *Windows PowerShell* and *kiwix-serve* on **Private** networks when asked, and set the home network to Private.
+  Creating firewall rules needs an administrator; the kit never changes the firewall itself.
+- **Mac:** `mac/serve-chat.pl` (perl and `IO::Socket::INET` ship with macOS; one forked process per connection).
+  If perl were missing it falls back to `mac/serve-chat.py`, but only when `xcode-select -p` succeeds or `python3` is
+  not the `/usr/bin` stub (which would pop up an install dialog). STOP kills the server and its children.
+  With Share on Wi-Fi off, the Mac chat page is still opened as a file and no server runs.
+- The LAN address is the one used for the default route (Windows: a UDP socket "connect", no packet sent; Mac:
+  `route -n get default` + `ipconfig getifaddr`), falling back to the first private address. START, STATUS and the
+  chat page show it; the chat page also draws a QR code with `www/qr.js` (offline, no libraries).
+- Turn it on/off: STATUS menu, `status.ps1 -ShareWifi on|off` / `bash mac/status.sh --share-wifi on|off` (applies
+  immediately), START `-ShareWifi`/`-NoShareWifi` / `--share-wifi`/`--no-share-wifi` (remembered), or the ini key.
+
+## Extra Libraries
+
+The catalog is `catalog/extra-libraries.txt` (`id | kiwix folder | file prefix | approx GB | group | description`).
+Like the core library, the newest dated file is resolved on download.kiwix.org at download time, fetched from the
+fastest mirror with resume, checked against the `.sha256` published on download.kiwix.org, marked in
+`library/checksums/VERIFIED/`, and the library restarts by itself if it is running.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\add-libraries.ps1 -List
+powershell -ExecutionPolicy Bypass -File scripts\add-libraries.ps1 -Add se-diy,wiktionary-simple   # or numbers: -Add 2,11
+powershell -ExecutionPolicy Bypass -File scripts\add-libraries.ps1 -Remove se-diy
+```
+```bash
+bash mac/add-libraries.sh --list
+bash mac/add-libraries.sh --add se-diy,wiktionary-simple      # --yes skips the "very big download" question
+bash mac/add-libraries.sh --remove se-diy
+```
+
+Ids: `se-sustainability`, `wiktionary-simple`, `se-lifehacks`, `se-medical`, `se-ham`, `se-outdoors`, `se-cooking`,
+`se-mechanics`, `trueprepper`, `ready-gov`, `se-diy`, `gutenberg-medicine`, `wikibooks`, `gutenberg-agriculture`,
+`gutenberg-technology`, `wiktionary`, `gutenberg-all` (206 GB, no full-text index; `all` skips it).
+
+## Check for updates
+
+`VERSION` (repo root) and `www/version.js` hold the kit version. The chat page button and
+`status.ps1 -CheckUpdates` / `bash mac/status.sh --check-updates` ask
+`https://api.github.com/repos/wallenberg4001-del/offline-ai-kit/releases/latest` – only when clicked/run – and compare
+versions (semver; `1.2.0-beta` < `1.2.0`). They show "up to date", "update available" with links (never download
+anything), or "you appear to be offline". `OFFLINE_AI_RELEASES_API=<url>` points the STATUS check elsewhere (testing).
+
 ## Files and folders
 
 | Path | What |
@@ -144,8 +223,10 @@ the chat page is served from `http://127.0.0.1:8091`, which Ollama allows by def
 | `library/` | `.zim` files + `checksums/VERIFIED` markers (shared by both platforms) |
 | `ollama-models/`, `home/` | the kit's AI models and Ollama settings (shared) |
 | `logs/` | logs, pid files, `wikipedia-progress.json` |
-| `www/` | chat page (`chat.html`, `ask-library.js`, `selftest.html`); START writes `kit-config.js` (ports) and on Mac `wiki-status.js` |
-| `tests/` | offline checks for `ask-library.js` (`node tests/ask-library.test.js`). Only in the GitHub repo, not in the download ZIP; not needed to run the kit |
+| `www/` | chat page (`chat.html`, `ask-library.js`, `qr.js`, `updates.js`, `version.js`, `selftest.html`); START writes `kit-config.js` (ports, Share on Wi-Fi, LAN address) and on Mac `wiki-status.js` |
+| `catalog/` | `extra-libraries.txt`, the Extra Libraries list |
+| `VERSION` | the kit version |
+| `tests/` | offline checks (`node tests/ask-library.test.js`, `node tests/phase2.test.js [--live]`). Only in the GitHub repo, not in the download ZIP; not needed to run the kit |
 | `kit-config.json` / `kit-config-mac.txt` | what setup chose last time |
 
 Uninstall: run STOP, then delete the kit folder (and the Desktop shortcut). Nothing else is installed.
@@ -210,6 +291,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup.ps1 -Easy -Tes
 # Mac (Terminal in the kit folder)
 bash mac/setup.sh --easy --test < /dev/null
 ```
+
+`OFFLINE_AI_NO_BROWSER=1` (environment) stops START from opening browser windows (for automated tests).
 
 Every setup run writes a full log to `logs/setup-YYYYMMDD-HHMMSS.log`; every START writes `logs/start-latest.log`.
 Look for the lines `RESULT: SETUP OK` / `RESULT: SETUP FINISHED WITH PROBLEMS` and `RESULT: START OK`.

@@ -26,6 +26,19 @@ still work when the internet or power is out.
  Not sure if you have a PC?
    If your computer runs Windows, it is a PC.
 
+ TWO WAYS TO INSTALL:
+
+   EASY-INSTALL ...  no questions at all. Picks good choices
+                     for your computer. Best for most people.
+
+   SETUP ..........  a step-by-step "Setup Wizard" where you
+   (SETUP.bat or     choose your features first: AI size,
+    SETUP-MAC)       full Wikipedia yes/no, extra libraries,
+                     and sharing with phones on home Wi-Fi.
+                     Press Enter to take each suggestion.
+                     Nothing downloads until you say yes at
+                     the end.
+
  On an Intel Mac the assistant is slower. An answer can take
  half a minute or more. That is normal. The library is fast.
 
@@ -103,6 +116,28 @@ still work when the internet or power is out.
 
  *  The assistant can be WRONG. For medicine or first aid,
     also look it up in the library, and call 911 when you can.
+
+
+--------------- PHONES, EXTRAS AND UPDATES ------------------
+
+ Double-click STATUS (STATUS.bat on a PC, STATUS-MAC on a
+ Mac). It shows what is running, then offers a little menu:
+
+   1) Share on Wi-Fi ON/OFF - lets phones and tablets on your
+      HOME Wi-Fi use the chat and library. The chat page then
+      shows a QR code: point the phone's camera at it.
+      ONLY at home on Wi-Fi you trust. NEVER on public Wi-Fi
+      (cafes, hotels, airports). It is OFF unless you turn it
+      on.
+
+   2) Add Extra Libraries - a dictionary, free old books,
+      question-and-answer sites (home repair, cooking, car
+      repair, outdoors), emergency preparedness guides.
+      Type the numbers you want. Needs internet to download.
+
+   3) Check for updates - only when you ask, needs internet.
+      It never downloads or changes anything by itself.
+      The chat page has a "Check for updates" button too.
 
 
 -------------------- IF SOMETHING GOES WRONG ----------------
