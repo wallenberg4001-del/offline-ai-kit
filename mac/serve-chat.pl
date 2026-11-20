@@ -1,16 +1,19 @@
 #!/usr/bin/perl
 # Offline AI Kit - small web server for the chat page on macOS, used when Share on Wi-Fi is on
 # (phones cannot open the chat page as a file). Uses only perl modules built into macOS.
-#   perl serve-chat.pl --bind 0.0.0.0 --port 8091 --www DIR --logs DIR --ollama-port 11435
-# Serves the www folder, /status.json (Wikipedia progress) and /ollama/api/... : a proxy to the
-# kit's AI server, which itself only listens on 127.0.0.1. Only chat/listing endpoints pass through.
+#   perl serve-chat.pl --bind 0.0.0.0 --port 8091 --www DIR --logs DIR --ollama-port 11435 --library-port 8090
+# Serves the www folder, /status.json (Wikipedia progress), /ollama/api/... (a proxy to the kit's AI
+# server; only chat/listing endpoints pass through) and the library's pages (/library, /content/...,
+# /search, /catalog/..., read-only proxy to Kiwix). The AI server and Kiwix only listen on 127.0.0.1,
+# so this one program is the only thing other devices can reach.
 use strict;
 use warnings;
 use IO::Socket::INET;
 use Cwd qw(realpath);
 use POSIX qw(:sys_wait_h);
 
-my %o = (bind => '127.0.0.1', port => 8091, www => '', logs => '', 'ollama-port' => 11435);
+my %o = (bind => '127.0.0.1', port => 8091, www => '', logs => '', 'ollama-port' => 11435, 'library-port' => 8090);
+my $libre = qr{^/(?:library|content|skin|search|suggest|catalog|random|raw|viewer|viewer_settings\.js|nojs|catch)(?:[/?]|$)};
 while (@ARGV) { my $k = shift @ARGV; $k =~ s/^--//; $o{$k} = shift @ARGV; }
 my $root = realpath($o{www}) or die "www folder not found\n";
 my %types = (html => 'text/html; charset=utf-8', js => 'text/javascript; charset=utf-8', css => 'text/css; charset=utf-8',
@@ -55,8 +58,8 @@ sub handle {
   my ($method, $target) = split / /, $first;
   return unless defined $target;
   $method = uc $method;
-  my $len = 0;
-  while (defined(my $l = <$c>)) { $l =~ s/\r?\n$//; last if $l eq ''; $len = $1 if $l =~ /^content-length:\s*(\d+)/i; }
+  my $len = 0; my $range = '';
+  while (defined(my $l = <$c>)) { $l =~ s/\r?\n$//; last if $l eq ''; $len = $1 if $l =~ /^content-length:\s*(\d+)/i; $range = $1 if $l =~ /^range:\s*(bytes=[0-9,\- ]+)$/i; }
   my ($path) = split /\?/, $target, 2;
   $path =~ s/%([0-9A-Fa-f]{2})/chr(hex($1))/ge;
 
@@ -76,6 +79,19 @@ sub handle {
     # Pass the answer back as it arrives (keeps streaming intact).
     my $buf;
     while (1) { my $n = sysread($up, $buf, 16384); last unless $n; my $off = 0; while ($off < $n) { my $w = syswrite($c, $buf, $n - $off, $off); last unless defined $w; $off += $w; } }
+    close $up;
+    return;
+  }
+
+  if ($target =~ $libre) {
+    if ($method ne 'GET' && $method ne 'HEAD') { send_resp($c, 405, 'Method Not Allowed', 'text/plain', ''); return; }
+    my $t = $target; $t =~ s{^/library/?(?=\?|$)}{/};
+    alarm 0;
+    my $up = IO::Socket::INET->new(PeerAddr => '127.0.0.1', PeerPort => $o{'library-port'}, Proto => 'tcp', Timeout => 10);
+    unless ($up) { send_resp($c, 502, 'Bad Gateway', 'text/plain; charset=utf-8', 'The library is not running'); return; }
+    syswrite($up, "$method $t HTTP/1.1\r\nHost: 127.0.0.1:$o{'library-port'}\r\n" . ($range ? "Range: $range\r\n" : '') . "Connection: close\r\n\r\n");
+    my $buf;
+    while (1) { my $n = sysread($up, $buf, 65536); last unless $n; my $off = 0; while ($off < $n) { my $w = syswrite($c, $buf, $n - $off, $off); last unless defined $w; $off += $w; } }
     close $up;
     return;
   }

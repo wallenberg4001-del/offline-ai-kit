@@ -327,13 +327,13 @@ for m in $MODEL_LIST; do
   say "  - $m"
   done_ok=no
   for try in 1 2 3 4 5; do
-    if [ -t 1 ]; then OLLAMA_HOST="127.0.0.1:$OLLAMA_PORT" "$OLL" pull "$m"; rc=$?
-    else OLLAMA_HOST="127.0.0.1:$OLLAMA_PORT" "$OLL" pull "$m" 2>&1 | tr '\r' '\n' | grep -avE 'pulling manifest|[0-9]+% ' ; rc=${PIPESTATUS[0]}; fi   # keep logs readable
+    if [ -t 1 ]; then OLLAMA_HOST="127.0.0.1:$OLLAMA_PORT" "$OLL" pull "$m" < /dev/null; rc=$?
+    else OLLAMA_HOST="127.0.0.1:$OLLAMA_PORT" "$OLL" pull "$m" < /dev/null 2>&1 | tr '\r' '\n' | grep -avE 'pulling manifest|[0-9]+% ' ; rc=${PIPESTATUS[0]}; fi   # keep logs readable
     if [ "$rc" -eq 0 ]; then done_ok=yes; break; fi
     warn "    Retrying in 20 seconds... ($try)"; sleep 20
   done
   if [ "$done_ok" != yes ]; then FAILED="$FAILED $m"; continue; fi
-  reply="$(OLLAMA_HOST="127.0.0.1:$OLLAMA_PORT" "$OLL" run "$m" 'Reply with just the word OK.' 2>/dev/null | tr '\n' ' ')"
+  reply="$(OLLAMA_HOST="127.0.0.1:$OLLAMA_PORT" "$OLL" run "$m" 'Reply with just the word OK.' 2>/dev/null < /dev/null | tr '\n' ' ')"
   say "    Test answer: ${reply:0:60}"
 done
 fi

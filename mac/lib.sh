@@ -457,7 +457,7 @@ start_kiwix() { # (re)starts kiwix-serve with every verified ZIM
   if [ "${#zims[@]}" -eq 0 ]; then warn "  No verified library files yet - the library will be empty."; return 1; fi
   for i in $(seq 1 10); do port_up "$LIBRARY_PORT" || break; sleep 0.5; done
   if port_up "$LIBRARY_PORT"; then err "  Port $LIBRARY_PORT is used by another program; the library cannot start."; return 1; fi
-  local addr=127.0.0.1; [ "$SHARE_ON_WIFI" = yes ] && addr=0.0.0.0
+  local addr=127.0.0.1   # always private; with Share on Wi-Fi the chat page server passes library pages through
   # shellcheck disable=SC2086  # see start_ollama
   nohup $ARCH_CMD "$bin" --address="$addr" --port="$LIBRARY_PORT" "${zims[@]}" >> "$LOG_DIR/kiwix-mac.log" 2>&1 < /dev/null &
   printf '%s\n' "$!" > "$(pid_file kiwix)"
@@ -489,7 +489,7 @@ show_share_status() {
     ok "  Share on Wi-Fi: ON"
     if ip="$(lan_ip)"; then ok "    Phones and tablets on the same Wi-Fi open:  http://$ip:$CHAT_PORT/"; say "    (the chat page also shows a QR code to scan)"
     else warn "    No home network found right now (is Wi-Fi connected?)."; fi
-    say "    If a phone cannot connect and the Mac asks whether kiwix-serve or perl may accept incoming"
+    say "    If a phone cannot connect and the Mac asks whether \"perl\" may accept incoming"
     say "    connections, click Allow (System Settings > Network > Firewall)."
     wifi_warning
   else
@@ -511,9 +511,9 @@ start_chat_server() { # the chat page over http on the home network (only used w
   if port_up "$CHAT_PORT"; then warn "  Port $CHAT_PORT is used by another program; phones cannot open the chat page."; return 1; fi
   how="$(chat_server_cmd)" || { warn "  Neither perl nor python3 is available, so phones cannot open the chat page (the library still works)."; return 1; }
   if [ "$how" = perl ]; then
-    nohup perl "$MAC_DIR/serve-chat.pl" --bind "$bind" --port "$CHAT_PORT" --www "$WWW_DIR" --logs "$LOG_DIR" --ollama-port "$OLLAMA_PORT" >> "$LOG_DIR/chat-server-mac.log" 2>&1 < /dev/null &
+    nohup perl "$MAC_DIR/serve-chat.pl" --bind "$bind" --port "$CHAT_PORT" --www "$WWW_DIR" --logs "$LOG_DIR" --ollama-port "$OLLAMA_PORT" --library-port "$LIBRARY_PORT" >> "$LOG_DIR/chat-server-mac.log" 2>&1 < /dev/null &
   else
-    nohup python3 "$MAC_DIR/serve-chat.py" --bind "$bind" --port "$CHAT_PORT" --www "$WWW_DIR" --logs "$LOG_DIR" --ollama-port "$OLLAMA_PORT" >> "$LOG_DIR/chat-server-mac.log" 2>&1 < /dev/null &
+    nohup python3 "$MAC_DIR/serve-chat.py" --bind "$bind" --port "$CHAT_PORT" --www "$WWW_DIR" --logs "$LOG_DIR" --ollama-port "$OLLAMA_PORT" --library-port "$LIBRARY_PORT" >> "$LOG_DIR/chat-server-mac.log" 2>&1 < /dev/null &
   fi
   printf '%s\n' "$!" > "$(pid_file chat-server)"
   for i in $(seq 1 30); do port_up "$CHAT_PORT" && return 0; sleep 0.3; done
@@ -525,9 +525,8 @@ set_share_on_wifi() { # set_share_on_wifi yes|no [apply]
   load_settings
   [ "${2:-}" = apply ] || return 0
   if ! kit_pid kiwix >/dev/null && ! kit_pid chat-server >/dev/null; then say "  The kit is not running; this applies the next time you start it."; return 0; fi
-  say "  Restarting the library and chat page..."
+  say "  Restarting the chat page server..."
   write_chat_config
-  start_kiwix || true
   stop_kit chat-server
   [ "$SHARE_ON_WIFI" = yes ] && { start_chat_server || true; }
   return 0

@@ -130,7 +130,7 @@
   const API = EP.ollama;
   const LIB = EP.library + "/";
   const VERSION = window.KIT_VERSION || CFG.version || "0.0.0";
-  document.getElementById("libLink").href = LIB;
+  document.getElementById("libLink").href = EP.home;
   document.getElementById("ver").textContent = "v" + VERSION;
 
   // ---- Share on Wi-Fi: address + QR code (made right here in the page, no internet) ----

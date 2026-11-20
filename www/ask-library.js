@@ -474,8 +474,9 @@
    *  - Opened as a file (Mac) or from http://127.0.0.1:8091 on the kit's own computer:
    *      talk to http://127.0.0.1:<ollamaPort> and http://127.0.0.1:<libraryPort> directly.
    *  - Opened from another device (Share on Wi-Fi, e.g. http://192.168.1.20:8091 on a phone):
-   *      the AI goes through the chat page's own /ollama proxy (the AI server never listens on the network),
-   *      and the library is the same computer's library port (so citation links open on the phone).
+   *      everything goes through the chat page server itself: the AI via its /ollama proxy and the library
+   *      pages via its read-only library proxy (/content/..., /search, home page at /library/).
+   *      The AI server and the library never listen on the network themselves.
    */
   function endpoints(loc, cfg) {
     cfg = cfg || {};
@@ -483,10 +484,10 @@
     var proto = loc && loc.protocol, host = (loc && loc.hostname) || "";
     var local = !host || /^(127\.\d+\.\d+\.\d+|localhost|\[?::1\]?)$/i.test(host);
     if ((proto === "http:" || proto === "https:") && !local) {
-      var h = host.indexOf(":") !== -1 && host.charAt(0) !== "[" ? "[" + host + "]" : host;
-      return { ollama: proto + "//" + loc.host + "/ollama", library: "http://" + h + ":" + lp, remote: true };
+      var origin = proto + "//" + (loc.host || host);
+      return { ollama: origin + "/ollama", library: origin, home: origin + "/library/", remote: true };
     }
-    return { ollama: "http://127.0.0.1:" + op, library: "http://127.0.0.1:" + lp, remote: false };
+    return { ollama: "http://127.0.0.1:" + op, library: "http://127.0.0.1:" + lp, home: "http://127.0.0.1:" + lp + "/", remote: false };
   }
 
   var api = {

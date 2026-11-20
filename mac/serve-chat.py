@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 # Offline AI Kit - fallback chat page server for macOS (used only if perl is missing; perl is normally built in).
-# Same job as serve-chat.pl: www folder, /status.json, and an /ollama/api/... proxy to the private AI server.
-#   python3 serve-chat.py --bind 0.0.0.0 --port 8091 --www DIR --logs DIR --ollama-port 11435
-import argparse, http.client, os, posixpath, socketserver, sys, time
+# Same job as serve-chat.pl: www folder, /status.json, an /ollama/api/... proxy to the private AI server,
+# and a read-only proxy to the library's pages (Kiwix stays on 127.0.0.1).
+#   python3 serve-chat.py --bind 0.0.0.0 --port 8091 --www DIR --logs DIR --ollama-port 11435 --library-port 8090
+import argparse, http.client, os, posixpath, re, socketserver, sys, time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import unquote, urlsplit
 
 ap = argparse.ArgumentParser()
-for k, d in (("bind", "127.0.0.1"), ("port", "8091"), ("www", ""), ("logs", ""), ("ollama-port", "11435")):
+for k, d in (("bind", "127.0.0.1"), ("port", "8091"), ("www", ""), ("logs", ""), ("ollama-port", "11435"), ("library-port", "8090")):
     ap.add_argument("--" + k, default=d)
 o = ap.parse_args()
 ROOT = os.path.realpath(o.www)
 TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
          ".json": "application/json; charset=utf-8", ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon", ".txt": "text/plain; charset=utf-8"}
+LIBRARY = re.compile(r"^/(?:library|content|skin|search|suggest|catalog|random|raw|viewer|viewer_settings\.js|nojs|catch)(?:[/?]|$)")
 ALLOWED = {"GET /api/tags", "GET /api/version", "GET /api/ps", "POST /api/chat", "POST /api/generate", "POST /api/show", "POST /api/embed", "POST /api/embeddings"}
 
 def log(msg):
@@ -59,7 +61,33 @@ class H(BaseHTTPRequestHandler):
                 break
             self.wfile.write(chunk); self.wfile.flush()
         c.close()
+    def library(self, head):
+        if self.command not in ("GET", "HEAD"):
+            return self.send(405, "text/plain")
+        t = re.sub(r"^/library/?(?=\?|$)", "/", self.path)
+        hdr = {}
+        if re.match(r"^bytes=[0-9,\- ]+$", self.headers.get("Range") or ""):
+            hdr["Range"] = self.headers["Range"]
+        try:
+            c = http.client.HTTPConnection("127.0.0.1", int(o.library_port), timeout=120)
+            c.request(self.command, t, headers=hdr)
+            r = c.getresponse()
+        except OSError:
+            return self.send(502, "text/plain; charset=utf-8", b"The library is not running")
+        self.send_response(r.status)
+        for k, v in r.getheaders():
+            if k.lower() not in ("transfer-encoding", "connection"):
+                self.send_header(k, v)
+        self.send_header("Connection", "close"); self.end_headers()
+        while not head:
+            chunk = r.read(65536)
+            if not chunk:
+                break
+            self.wfile.write(chunk)
+        c.close()
     def route(self, head=False):
+        if LIBRARY.match(self.path):
+            return self.library(head)
         path = unquote(urlsplit(self.path).path)
         if path.startswith("/ollama/"):
             return self.proxy(path[7:])

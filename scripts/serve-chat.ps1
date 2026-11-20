@@ -3,6 +3,8 @@
 # Serves the kit's www folder, /status.json (Wikipedia download progress) and /ollama/api/... :
 # a small proxy to the kit's AI server, which itself only ever listens on 127.0.0.1.
 # Only chat/listing endpoints are passed through (no pulling, deleting or creating models).
+# It also passes the library's pages through read-only (/library, /content/..., /search, /catalog/...),
+# so with Share on Wi-Fi only this one program is reachable; Kiwix and the AI server stay on 127.0.0.1.
 # Uses TcpListener (not HttpListener, which needs admin rights for anything but localhost)
 # and a pool of worker threads, so a long streaming answer never blocks other requests or phones.
 param([int]$Port = 0, [string]$Bind = '')
@@ -21,6 +23,7 @@ $ctx = @{
   WikiPrefix  = $WikipediaPrefix
   SkipWiki    = [bool]$SkipWikipedia
   OllamaPort  = $OllamaPort
+  LibraryPort = $LibraryPort
   Types       = @{ '.html'='text/html; charset=utf-8'; '.js'='text/javascript; charset=utf-8'; '.css'='text/css; charset=utf-8'; '.json'='application/json; charset=utf-8'; '.png'='image/png'; '.svg'='image/svg+xml'; '.ico'='image/x-icon'; '.txt'='text/plain; charset=utf-8' }
 }
 
@@ -56,8 +59,11 @@ $handler = {
     $parts = $lines[0].Split(' ')
     if ($parts.Count -lt 2) { return }
     $method = $parts[0].ToUpper(); $target = $parts[1]
-    $len = 0
-    foreach ($l in $lines) { if ($l -match '^(?i)content-length:\s*(\d+)') { $len = [int]$Matches[1] } }
+    $len = 0; $range = ''
+    foreach ($l in $lines) {
+      if ($l -match '^(?i)content-length:\s*(\d+)') { $len = [int]$Matches[1] }
+      if ($l -match '^(?i)range:\s*(bytes=[0-9,\- ]+)$') { $range = $Matches[1] }
+    }
     $path = [Uri]::UnescapeDataString(($target -split '\?')[0])
     $none = [byte[]]@()
 
@@ -82,6 +88,25 @@ $handler = {
       # Pass the answer back byte for byte as it arrives (keeps NDJSON streaming and chunked encoding intact).
       $buf = New-Object byte[] 16384
       while ($true) { $n = $us.Read($buf, 0, $buf.Length); if ($n -le 0) { break }; $s.Write($buf, 0, $n); $s.Flush() }
+      return
+    }
+
+    if ($target -match '^/(library|content|skin|search|suggest|catalog|random|raw|viewer|viewer_settings\.js|nojs|catch)([/?]|$)') {
+      # ---- read-only proxy to the library (Kiwix) ----
+      if ($method -ne 'GET' -and $method -ne 'HEAD') { Send $s 405 'Method Not Allowed' 'text/plain' $none $false; return }
+      $t = $target -replace '^/library/?(?=\?|$)', '/'
+      try { $up = New-Object System.Net.Sockets.TcpClient('127.0.0.1', [int]$C.LibraryPort) }
+      catch { Send $s 502 'Bad Gateway' 'text/plain; charset=utf-8' ([System.Text.Encoding]::ASCII.GetBytes('The library is not running')) $false; return }
+      $up.ReceiveTimeout = 120000
+      $us = $up.GetStream()
+      $req = "$method $t HTTP/1.1`r`nHost: 127.0.0.1:$($C.LibraryPort)`r`n"
+      if ($range) { $req += "Range: $range`r`n" }
+      $req += "Connection: close`r`n`r`n"
+      $rb = [System.Text.Encoding]::ASCII.GetBytes($req)
+      $us.Write($rb, 0, $rb.Length); $us.Flush()
+      $buf = New-Object byte[] 65536
+      while ($true) { $n = $us.Read($buf, 0, $buf.Length); if ($n -le 0) { break }; $s.Write($buf, 0, $n) }
+      $s.Flush()
       return
     }
 

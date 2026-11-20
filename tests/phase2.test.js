@@ -19,9 +19,11 @@ e = A.endpoints({ protocol: "http:", hostname: "localhost", host: "localhost:809
 check("localhost counts as this computer", !e.remote, e);
 e = A.endpoints({ protocol: "http:", hostname: "192.168.68.76", host: "192.168.68.76:8091" }, cfg);
 check("phone: AI goes through the page's /ollama proxy", e.ollama === "http://192.168.68.76:8091/ollama" && e.remote, e);
-check("phone: library is the computer's LAN address", e.library === "http://192.168.68.76:8090", e);
+check("phone: library pages also go through the page server", e.library === "http://192.168.68.76:8091" && e.home === "http://192.168.68.76:8091/library/", e);
 e = A.endpoints({ protocol: "http:", hostname: "10.0.0.9", host: "10.0.0.9:9000" }, { ollamaPort: 11500, libraryPort: 9001 });
-check("custom ports are respected", e.ollama === "http://10.0.0.9:9000/ollama" && e.library === "http://10.0.0.9:9001", e);
+check("custom ports are respected", e.ollama === "http://10.0.0.9:9000/ollama" && e.library === "http://10.0.0.9:9000", e);
+e = A.endpoints({ protocol: "file:", hostname: "", host: "" }, { ollamaPort: 11500, libraryPort: 9001 });
+check("custom ports locally", e.ollama === "http://127.0.0.1:11500" && e.library === "http://127.0.0.1:9001" && e.home === "http://127.0.0.1:9001/", e);
 
 // ---- versions ----
 const cmp = U.compareVersions;

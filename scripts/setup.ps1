@@ -316,16 +316,16 @@ try {
       # output is redirected to a file, so relax that here and keep the log free of spinner codes.
       $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
       if ([Console]::IsOutputRedirected) {
-        & $ollama pull $m.Name 2>&1 | ForEach-Object { "$_" -replace "\x1b\[[0-9;?]*[A-Za-z]", '' } |
+        $null | & $ollama pull $m.Name 2>&1 | ForEach-Object { "$_" -replace "\x1b\[[0-9;?]*[A-Za-z]", '' } |
           Where-Object { $_ -match '\S' -and $_ -notmatch 'pulling manifest|\d+%' } | ForEach-Object { Write-Host "    $($_.Trim())" }
-      } else { & $ollama pull $m.Name }
+      } else { $null | & $ollama pull $m.Name }
       $pullCode = $LASTEXITCODE
       $ErrorActionPreference = $eap
       if ($pullCode -eq 0) { $ok = $true } else { Write-Host '    Retrying in 20 seconds...' -ForegroundColor Yellow; Start-Sleep -Seconds 20 }
     }
     if (-not $ok) { $failed += $m.Name; continue }
     $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-    $reply = & $ollama run $m.Name 'Reply with just the word OK.' 2>$null
+    $reply = $null | & $ollama run $m.Name 'Reply with just the word OK.' 2>$null
     $ErrorActionPreference = $eap
     Write-Host ("    Test answer: " + (($reply -join ' ').Trim() -replace '\s+',' ')) -ForegroundColor DarkGray
   }

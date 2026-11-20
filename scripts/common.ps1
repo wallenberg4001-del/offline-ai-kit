@@ -481,7 +481,7 @@ function Start-KitKiwix {
   if ($zims.Count -eq 0) { Write-Host "  No verified library files yet - the library will be empty." -ForegroundColor Yellow; return $false }
   for ($i = 0; $i -lt 10 -and (Test-Port $LibraryPort); $i++) { Start-Sleep -Milliseconds 500 }
   if (Test-Port $LibraryPort) { Write-Host "  Port $LibraryPort is used by another program; the library cannot start." -ForegroundColor Red; return $false }
-  $addr = '127.0.0.1'; if ($ShareOnWifi) { $addr = '0.0.0.0' }
+  $addr = '127.0.0.1'   # always private; with Share on Wi-Fi the chat page server passes library pages through
   $argStr = "--address=$addr --port=$LibraryPort " + (($zims | ForEach-Object { '"' + $_ + '"' }) -join ' ')
   $p = Start-Process -FilePath $exe -ArgumentList $argStr -WindowStyle Hidden -PassThru `
        -RedirectStandardOutput (Join-Path $LogDir 'kiwix.out.log') -RedirectStandardError (Join-Path $LogDir 'kiwix.log')
