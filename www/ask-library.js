@@ -11,7 +11,7 @@
  *      and invented links are removed. Only fetched articles are ever listed as sources.
  *
  * kiwix-serve 3.x sends "Access-Control-Allow-Origin: *", so the page can read it directly,
- * both when served from http://127.0.0.1:8091 (Windows) and when opened as a file (Mac), and from a
+ * both when served from http://127.0.0.1:8091 and when opened as a file, and from a
  * phone on the same Wi-Fi when Share on Wi-Fi is on (see endpoints() below).
  *
  * Works in a browser (window.AskLibrary) and in Node 18+ (module.exports) for automated tests.
@@ -471,7 +471,7 @@
 
   /*
    * Where the AI server and the library are, as seen from this page.
-   *  - Opened as a file (Mac) or from http://127.0.0.1:8091 on the kit's own computer:
+   *  - Opened as a file, or from http://127.0.0.1:8091 on this computer:
    *      talk to http://127.0.0.1:<ollamaPort> and http://127.0.0.1:<libraryPort> directly.
    *  - Opened from another device (Share on Wi-Fi, e.g. http://192.168.1.20:8091 on a phone):
    *      everything goes through the chat page server itself: the AI via its /ollama proxy and the library

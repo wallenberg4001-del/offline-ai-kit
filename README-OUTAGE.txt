@@ -2,8 +2,7 @@ OFFLINE AI KIT - QUICK CARD (no internet needed)
 ================================================
 
 START   Windows: START-OFFLINE-AI.bat     Mac: START-OFFLINE-AI-MAC.command
-        Browser opens:  Chat     (Windows: http://127.0.0.1:8091/chat.html,
-                                  Mac: the chat.html file in the kit's www folder)
+        Browser opens:  Chat     http://127.0.0.1:8091/chat.html
                         Library  http://127.0.0.1:8090/
 STOP    Windows: STOP-OFFLINE-AI.bat      Mac: STOP-OFFLINE-AI-MAC.command
 CHECK   Windows: STATUS.bat               Mac: STATUS-MAC.command

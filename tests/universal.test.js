@@ -71,10 +71,10 @@ check("linux missing message names SETUP-LINUX", /bash SETUP-LINUX\.sh/.test(U.m
 check("windows arm message", /runtime\/windows-x64/.test(U.missingProgramMessage("windows-arm64")) && /Windows on ARM/.test(U.missingProgramMessage("windows-arm64")));
 check("macos 12 does not require ollama", U.selectRuntime({ platformId: "mac-arm64", channel: "none", files: ["runtime/mac-arm64/kiwix/kiwix-serve"] }).missing === false);
 
-check("extra GB windows", U.universalExtraGB("windows-x64") === 5.5);
-check("extra GB mac", U.universalExtraGB("mac-arm64") === 7 && U.universalExtraGB("mac-x64") === 7);
-check("extra GB linux", U.universalExtraGB("linux-x64") === 7 && U.universalExtraGB("linux-arm64") === 7);
-check("allowance is 8 GB", U.UNIVERSAL_PROGRAM_GB === 8);
+check("extra GB windows", U.universalExtraGB("windows-x64") === 11.5);
+check("extra GB mac", U.universalExtraGB("mac-arm64") === 13 && U.universalExtraGB("mac-x64") === 13);
+check("extra GB linux", U.universalExtraGB("linux-x64") === 13 && U.universalExtraGB("linux-arm64") === 13);
+check("allowance is 14 GB", U.UNIVERSAL_PROGRAM_GB === 14);
 
 const ps = read("scripts/common.ps1");
 const prog = read("scripts/programs.ps1");
@@ -96,6 +96,66 @@ check("no new symlinks under runtime", !/SymbolicLink|ln -s/.test(prog) && !/ln 
 check("quarantine is cleared", /com\.apple\.quarantine/.test(sh));
 check("execute bit still stages a local copy", /stage_program_tree/.test(sh));
 check("linux ollama accepts the current tar.zst name", /tar\.zst/.test(sh) && /ollama-linux-amd64\.tgz/.test(sh) && /ollama-linux-arm64\.tgz/.test(sh));
+check("powershell allowance is 14", /\$script:UniversalProgramGB = 14\.0/.test(ps));
+check("bash allowance is 14", /UNIVERSAL_PROGRAM_GB=14\.0/.test(sh));
+
+const zstdPins = [
+  "d81be8618553d7d658e09da669ffd68ec76d8095161a590c9b8a1a99fce67ca8",
+  "9848858f7332effb071818f282b3ac3052085e3dafa9ae09f0060b7e211a80dc",
+  "190c196b46883a234238d9c52a211c1494df79bb170fbe30c6fc22639d5d4731",
+  "4fa2386a975c2120f91f3103bd4268a19a341cb9063417f3829018e94f28c8c6",
+  "8765d39af6a89f5b7b05854d08027e739c8f2245c4488c8365b3ddaf5cdbcf28",
+  "ef983e169862f9d32652c9017e500052bd31ce5a2c7cb16bccdb71bcfa90c884"
+];
+zstdPins.forEach(function (pin) {
+  check("zstd pin " + pin.slice(0, 8), sh.indexOf(pin) >= 0 && prog.indexOf(pin) >= 0);
+});
+check("checked zst download is kept", /Left the checked download in place/.test(sh) && /Left the checked download in place/.test(prog));
+const oneSh = sh.slice(sh.indexOf("install_one_ollama()"), sh.indexOf("install_darwin_copies()"));
+const onePs = prog.slice(prog.indexOf("function Install-OllamaAsset"), prog.indexOf("function Install-DarwinOllamaCopies"));
+check("bash reuses a checked ollama archive", oneSh.indexOf("Using the checked download already on the drive") >= 0 && oneSh.indexOf("download_resumable") > oneSh.indexOf("Using the checked download already on the drive"));
+check("powershell reuses a checked ollama archive", onePs.indexOf("Using the checked download already on the drive") >= 0 && onePs.indexOf("Save-ResumableFile") > onePs.indexOf("Using the checked download already on the drive"));
+check("a failed platform does not stop the others", /Some programs for other computers were not installed/.test(sh) && /Some programs for other computers were not installed/.test(prog));
+check("installed programs stay put", /Programs that installed were left in place/.test(sh) && /Programs that installed were left in place/.test(prog));
+
+const uniSh = sh.slice(sh.indexOf("install_universal_programs()"), sh.indexOf("install_portable_ollama()"));
+check("linux arm is still attempted if linux x64 fails", /linux-x64\/ollama/.test(uniSh) && /linux-arm64\/ollama/.test(uniSh) && !/\|\| return 1/.test(uniSh));
+const uniPs = prog.slice(prog.indexOf("function Install-UniversalPrograms"));
+check("windows universal install continues", /linux-x64\/ollama/.test(uniPs) && /linux-arm64\/ollama/.test(uniPs) && /\$failed \+= \$step\.Name/.test(uniPs));
+
+check("test mode does not count extra programs", /not downloaded in test mode\./.test(setupSh) && /not downloaded in test mode\./.test(setupPs));
+check("test mode leaves the extra at zero", /EXTRA_PROG=0/.test(setupSh) && /\$extraProg = 0\.0/.test(setupPs) && /TEST_MODE" != yes/.test(setupSh) && /-not \$TestMode/.test(setupPs));
+
+const cancelAt = setupSh.indexOf("RESULT: SETUP CANCELLED");
+const testWrites = [];
+let from = 0;
+let at = setupSh.indexOf("set_setting TEST_MODE yes", from);
+while (at >= 0) { testWrites.push(at); from = at + 1; at = setupSh.indexOf("set_setting TEST_MODE yes", from); }
+check("TEST_MODE is saved only after Proceed", cancelAt >= 0 && testWrites.length === 1 && testWrites[0] > cancelAt);
+check("system ollama setting is saved only after Proceed", setupSh.indexOf("set_setting USE_SYSTEM_OLLAMA yes") > cancelAt);
+check("setup writes no settings before cancel", setupSh.indexOf("set_setting") > cancelAt);
+const cancelPs = setupPs.indexOf("RESULT: SETUP CANCELLED");
+check("windows TEST_MODE is saved only after Proceed", cancelPs >= 0 && setupPs.indexOf("Set-KitSetting 'TEST_MODE'") > cancelPs);
+
+const startSh = read("mac/start.sh");
+const startPs = read("scripts/start.ps1");
+check("start always runs the chat server", /Chat page \(port \$CHAT_PORT\)/.test(startSh) && /fi\r?\nstart_chat_server \|\| true/.test(startSh));
+check("chat url follows the server, not only Share on Wi-Fi", /if kit_pid chat-server >\/dev\/null; then CHAT_URL=/.test(startSh));
+check("chat server binds to this computer unless sharing", /bind=127\.0\.0\.1/.test(sh) && /\[ "\$SHARE_ON_WIFI" = yes \] && bind=0\.0\.0\.0/.test(sh));
+check("share toggle still serves the chat page", /stop_kit chat-server\r?\n  start_chat_server \|\| true/.test(sh));
+check("status always shows the chat page server", /show "Chat page server" "\$CHAT_PORT"/.test(read("mac/status.sh")) && !/&& show "Chat page server"/.test(read("mac/status.sh")));
+check("windows start always runs the chat server", /Start-ChatServer/.test(startPs) && !/if \(\$ShareOnWifi\) \{[^}]*Start-ChatServer/.test(startPs));
+check("wikipedia names the ini only when the key is in the file", /is_yes "\$\(setting SKIP_WIKIPEDIA no\)"/.test(startSh) && /ContainsKey\('SKIP_WIKIPEDIA'\)/.test(startPs));
+check("wikipedia can be off without blaming the ini", /Wikipedia is switched off\. Everything else works\./.test(startSh) && /Wikipedia is switched off\. Everything else works\./.test(startPs));
+check("linux start uses the mac script", /mac\/start\.sh/.test(read("linux/start.sh")));
+check("linux setup uses the mac script", /mac\/setup\.sh/.test(read("linux/setup.sh")));
+
+const advanced = read("ADVANCED.md");
+check("docs use the 14 GB allowance", /11\.5 GB on Windows, 13\.0 GB on Mac and Linux/.test(advanced) && /allowance is 14 GB/.test(advanced));
+check("chat port is not Mac-only", !/Mac only with Share on Wi-Fi/.test(advanced));
+check("readme extra space matches", /11\.5 GB more on Windows, about 13 GB more on Mac and Linux/.test(read("README.md")));
+check("outage card uses the chat url", /http:\/\/127\.0\.0\.1:8091\/chat\.html/.test(read("README-OUTAGE.txt")) && !/chat\.html file/.test(read("README-OUTAGE.txt")));
+
 check("version is 1.3.0", read("VERSION").trim() === "1.3.0" && /"1\.3\.0"/.test(read("www/version.js")));
 
 if (fails) { console.log(fails + " failed"); process.exit(1); }

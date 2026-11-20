@@ -11,7 +11,7 @@
 # shellcheck source=lib.sh
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
-DETECT=no; TEST=no; TIER=""; MODELS=""; YES=no; EASY=no; HWPROFILE=""; ZIMS=""; INSTALL_PATH=""; SKIPW=no; WITHW=no; SYSOLL=no; NOSTART=no; SHAREW=no; EXTRAS=""; MAPS=""; UNIVERSAL=no; UNIVERSAL_FLAG=no
+DETECT=no; TEST=no; TIER=""; MODELS=""; YES=no; EASY=no; HWPROFILE=""; ZIMS=""; INSTALL_PATH=""; SKIPW=no; WITHW=no; SYSOLL=no; NOSTART=no; SHAREW=no; EXTRAS=""; MAPS=""; UNIVERSAL=no; UNIVERSAL_FLAG=no; PERSIST_SYSTEM_OLLAMA=no
 ORIG_ARGS=("$@")
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -39,7 +39,13 @@ done
 [ -n "$TIER" ]   || TIER="$(setting LIBRARY_TIER '')"
 [ -n "$MODELS" ] || MODELS="$(setting MODELS '')"
 [ -n "$ZIMS" ]   || ZIMS="$(setting ZIMS '')"
-if [ "$SYSOLL" = yes ]; then set_setting USE_SYSTEM_OLLAMA yes; load_settings; fi
+# Remember this in memory now. kit-settings.ini is written only after Proceed
+# (Easy Install does not ask, and writes the file when the download starts).
+if [ "$SYSOLL" = yes ]; then
+  PERSIST_SYSTEM_OLLAMA=yes
+  USE_SYSTEM_OLLAMA=yes
+  OLLAMA_PORT="$(setting OLLAMA_PORT 11434)"
+fi
 ask() { # ask <question> <default>
   local a
   if [ "$YES" = yes ]; then printf '%s\n' "$2"; return; fi
@@ -112,7 +118,7 @@ if [ "$TARGET" != "$KIT" ]; then
 fi
 ensure_dirs
 start_log "setup-$(date '+%Y%m%d-%H%M%S').log"
-if [ "$TEST" = yes ] || is_yes "${OFFLINE_AI_TEST:-no}"; then set_setting TEST_MODE yes; enable_test_mode; fi
+if [ "$TEST" = yes ] || is_yes "${OFFLINE_AI_TEST:-no}"; then enable_test_mode; fi
 [ "$TEST_MODE" = yes ] && warn "TEST MODE: tiny library, one small model, 13 MB Wikipedia stand-in. Delete kit-settings.ini (or set TEST_MODE=no) to leave test mode."
 # Make double-clicking work later: executable bits + remove the "downloaded from internet" flag.
 chmod +x "$KIT"/*.command "$KIT"/mac/*.sh "$KIT"/linux/*.sh "$KIT"/*.sh 2>/dev/null || true
@@ -274,7 +280,8 @@ else
   say "  2) All computers (universal drive)"
   say "     Programs for Windows, Mac (Apple chip and Intel) and Linux (64-bit PC and ARM)."
   say "     One shared copy of the models, Wikipedia, extra libraries and maps."
-  say "     Extra download for the other computers: about $(universal_extra_gb) GB."
+  if [ "$TEST_MODE" = yes ]; then say "     Test mode does not download programs for other computers."
+  else say "     Extra download for the other computers: about $(universal_extra_gb) GB."; fi
   if [ "$UNIVERSAL_FLAG" = yes ]; then
     say "  Chosen on the command line: All computers (universal drive)"
     UNIVERSAL=yes
@@ -295,7 +302,7 @@ EXTRA_GB="$(extra_gb "$EXTRA_SEL")"
 MAP_GB="$(map_gb $MAP_SEL)"
 EXTRA_PROG=0
 est="$(awk -v l="$lib_gb" -v m="$(models_gb "$MODEL_LIST")" -v x="$EXTRA_GB" -v p="$MAP_GB" 'BEGIN { printf "%.1f", 0.5 + l + m + x + p + 0.5 }')"
-if [ "$UNIVERSAL" = yes ]; then
+if [ "$UNIVERSAL" = yes ] && [ "$TEST_MODE" != yes ]; then
   EXTRA_PROG="$(universal_extra_gb)"
   est="$(awk -v a="$est" -v b="$EXTRA_PROG" 'BEGIN { printf "%.1f", a + b }')"
 fi
@@ -310,7 +317,10 @@ if [ -n "${MAP_SEL// /}" ]; then say "  Offline maps:     $MAP_SEL($(size_label 
 if [ "$SHARE_CHOICE" = yes ]; then say "  Share on Wi-Fi:   ON (trusted home Wi-Fi only)"; else say "  Share on Wi-Fi:   off"; fi
 if [ "$UNIVERSAL" = yes ]; then say "  Computers:        All computers (universal drive)"
 else say "  Computers:        This computer only"; fi
-if [ "$UNIVERSAL" = yes ]; then say "  Extra programs:   about $EXTRA_PROG GB (other computers). Library, models and maps stay one shared copy."; fi
+if [ "$UNIVERSAL" = yes ]; then
+  if [ "$TEST_MODE" = yes ]; then say "  Extra programs:   not downloaded in test mode."
+  else say "  Extra programs:   about $EXTRA_PROG GB (other computers). Library, models and maps stay one shared copy."; fi
+fi
 say "  Download now:     about $est GB   (with Wikipedia later: about $total GB in total)"
 say "  Free space:       $(gb "$FREE") on this drive"
 if awk -v f="$FREE" -v e="$est" 'BEGIN { exit !(f < e * 1e9) }'; then err "Not enough free space for these choices. Free up space, pick fewer extras or a smaller model size, or choose another drive."; pause_exit 1; fi
@@ -322,6 +332,8 @@ if [ "$EASY" != yes ]; then
   esac
 fi
 # Save the choices so START / STOP / STATUS follow them.
+if [ "$TEST" = yes ] || is_yes "${OFFLINE_AI_TEST:-no}"; then set_setting TEST_MODE yes; fi
+if [ "$PERSIST_SYSTEM_OLLAMA" = yes ]; then set_setting USE_SYSTEM_OLLAMA yes; load_settings; fi
 if [ "$WANT_WIKI" = yes ]; then set_setting SKIP_WIKIPEDIA no; else set_setting SKIP_WIKIPEDIA yes; fi
 set_share_on_wifi "$SHARE_CHOICE"
 [ -n "${EXTRA_SEL// /}" ] && set_setting EXTRA_LIBRARIES "$(printf '%s' "$EXTRA_SEL" | sed 's/ *$//' | tr ' ' ',')"

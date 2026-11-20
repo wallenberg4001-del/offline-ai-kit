@@ -16,7 +16,7 @@ $script:KitPlatformId = 'windows-x64'
 $OllamaDir  = Join-Path $Runtime 'windows-x64\ollama'
 $KiwixDir   = Join-Path $Runtime 'windows-x64\kiwix'
 # Keep in step with www/universal.js (UNIVERSAL_PROGRAM_GB and ALREADY_COUNTED_GB).
-$script:UniversalProgramGB = 8.0
+$script:UniversalProgramGB = 14.0
 $script:OllamaPinVersion = 'v0.12.9'
 $script:OllamaPinSha = 'a3bd64569cb945133dd714f3568989f6bcd4d988a3ba47d2c0dc644770547f17'
 $Library    = Join-Path $Kit 'library'

@@ -109,7 +109,7 @@ bash mac/setup.sh [options]
 
 Linux is the same wizard: `bash linux/setup.sh` (or `bash SETUP-LINUX.sh`). It downloads
 `kiwix-tools_linux-x86_64` or `kiwix-tools_linux-aarch64` (musl when `ldd --version` mentions musl) and
-`ollama-linux-amd64.tgz` or `ollama-linux-arm64.tgz` (the tarball has `bin/ollama` and `lib/ollama`).
+`ollama-linux-amd64.tgz` or `ollama-linux-arm64.tgz`, or `.tar.zst` when that is the published file (the archive has `bin/ollama` and `lib/ollama`).
 The phone address is the `src` address from `ip route get 1.1.1.1`.
 
 **Scripted wizard answers.** Without `--yes`/`-Easy`, the wizard reads one answer per line from standard input when it
@@ -123,11 +123,12 @@ printf '\n16\n2\nY\n1\nN\n\n1\nY\nN\n' | bash mac/setup.sh --test
 
 `--universal` / `-Universal` skips that question and downloads every computer's programs. The library,
 models and maps are still downloaded once. The summary line `Extra programs:` is the extra allowance
-(5.5 GB on Windows, 7.0 GB on Mac and Linux) on top of this computer's programs. The full program
-allowance is 8 GB, which covers the compressed Ollama builds (about 1.6 GB Windows, 0.2 GB Mac stored
-twice because it is one universal binary, about 1.6 GB for each Linux CPU) plus Kiwix tools, the macOS 13
-Ollama pin, and room to unpack. Linux uses `ollama-linux-amd64.tgz` / `ollama-linux-arm64.tgz` when the
-release still publishes them, and `.tar.zst` when that is the current file.
+(11.5 GB on Windows, 13.0 GB on Mac and Linux) on top of this computer's programs. The full program
+allowance is 14 GB. Measured unpacked trees are about 12.8 GB. Test mode does not download those extra
+programs and does not count them. Linux uses `ollama-linux-amd64.tgz` / `ollama-linux-arm64.tgz` when the
+release still publishes them, and `.tar.zst` when that is the current file. If this computer cannot read
+`.tar.zst`, setup downloads a small checksum-checked zstd program. A failed unpack leaves the checked
+archive and any programs that already installed, then continues with the other computers.
 ```bat
 rem Windows (cmd), answers.txt holds one answer per line
 type answers.txt | powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup.ps1 -Test
@@ -153,7 +154,7 @@ SETUP and START. Command-line options win over the file.
 | `SKIP_WIKIPEDIA` | `no` | `yes` = never start the 127 GB download (Easy/SETUP may set this for you) |
 | `LIBRARY_PORT` | `8090` | Kiwix library port |
 | `OLLAMA_PORT` | `11435` (`11434` with system Ollama) | AI server port |
-| `CHAT_PORT` | `8091` | chat page server port (Windows always; Mac only with Share on Wi-Fi) |
+| `CHAT_PORT` | `8091` | chat page server port (always on this computer; `0.0.0.0` only when Share on Wi-Fi is on) |
 | `SHARE_ON_WIFI` | `0` | `1` = Share on Wi-Fi (library + chat page on the home network; the AI server stays on 127.0.0.1) |
 | `EXTRA_LIBRARIES` | – | written by setup as a record of the Extra Libraries you chose (informational) |
 | `MAPS` | – | written by setup as a record of the offline maps you chose (informational). Easy Install leaves it unset unless `--maps` / `-Maps` was passed. |
@@ -171,9 +172,9 @@ Any model from https://ollama.com/library can go in `MODELS`; setup checks each 
 ### Using an Ollama you already have
 
 Set `USE_SYSTEM_OLLAMA=yes` (or pass the option). Models are pulled into *your* Ollama's store, and START/STOP
-leave it alone. Make sure it is running. On **Mac** the chat page is opened as a local file, so your Ollama must
-allow that origin: quit Ollama, run `launchctl setenv OLLAMA_ORIGINS "*"`, and start Ollama again. (On Windows
-the chat page is served from `http://127.0.0.1:8091`, which Ollama allows by default.)
+leave it alone. Make sure it is running. The chat page is served from `http://127.0.0.1:8091`, which Ollama
+allows by default. If that server does not start, the page opens as a local file. On Mac, quit Ollama, run
+`launchctl setenv OLLAMA_ORIGINS "*"`, and start Ollama again so a file page can talk to it.
 
 ## Share on Wi-Fi (how it works)
 
@@ -199,7 +200,8 @@ Off by default (`SHARE_ON_WIFI=0`): Kiwix, Ollama and the chat page listen on `1
 - **Mac:** `mac/serve-chat.pl` (perl and `IO::Socket::INET` ship with macOS; one forked process per connection).
   If perl were missing it falls back to `mac/serve-chat.py`, but only when `xcode-select -p` succeeds or `python3` is
   not the `/usr/bin` stub (which would pop up an install dialog). STOP kills the server and its children.
-  With Share on Wi-Fi off, the Mac chat page is still opened as a file and no server runs.
+  The chat page server always runs on `127.0.0.1:8091`. Share on Wi-Fi changes that bind to `0.0.0.0`.
+  If the server does not start, the chat page opens as a file. Linux uses the same start script.
 - The LAN address is the one used for the default route (Windows: a UDP socket "connect", no packet sent; Mac:
   `route -n get default` + `ipconfig getifaddr`), falling back to the first private address. START, STATUS and the
   chat page show it; the chat page also draws a QR code with `www/qr.js` (offline, no libraries).
@@ -311,13 +313,12 @@ loaded by `www/chat.html`. Nothing else runs for it.
    for a memory-only answer, labelled as such.
 
 **Why no proxy?** `kiwix-serve` 3.x (what setup installs) sends `Access-Control-Allow-Origin: *` on its search,
-suggest, catalog and content responses, so the chat page can read it directly – from `http://127.0.0.1:8091`
-(Windows) and from a `file://` page (Mac, origin `null`). The kit's Ollama already allows any origin
+suggest, catalog and content responses, so the chat page can read it directly from `http://127.0.0.1:8091`, and from a `file://` page (origin `null`)
+if the page was opened as a file. The kit's Ollama already allows any origin
 (`OLLAMA_ORIGINS=*`). Both still listen only on `127.0.0.1`. If you point the kit at a very old kiwix-serve without
 that header, the chat says it can't reach the library; untick **Ask the library** or update Kiwix by re-running setup.
 
-**Self-test page.** With the kit running, open `www/selftest.html` (Windows: http://127.0.0.1:8091/selftest.html;
-Mac: double-click `www/selftest.html` or drag it into the browser). It checks, with the real library and model:
+**Self-test page.** With the kit running, open http://127.0.0.1:8091/selftest.html. It checks, with the real library and model:
 the catalog is readable, a question (default: "How do I treat mild hypothermia?") gets an answer whose sources all open (HTTP 200), a nonsense question gives
 "not in the library", and a forged `[n]` and a fake link are removed. Add `#q=your question` to try another question,
 or `#model=llama3.2:3b` to pick the model. (On a Mac, macOS drops the `#…` part when the page is opened by double-click or `open`; type it into the address bar instead.) Automated tests can add `#report=http://127.0.0.1:PORT/` to receive the

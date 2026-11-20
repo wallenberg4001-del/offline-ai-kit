@@ -6,10 +6,10 @@
   if (root) root.KitUniversal = api;
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   // Allowance for every computer's programs, including room to unpack.
-  // Compressed Ollama v0.40.16 assets (2026-11-09) are about 1.62 GB (Windows),
-  // 0.19 GB (Mac universal binary, stored as a real copy in each Mac folder),
-  // 1.55 GB (Linux x64) and 1.60 GB (Linux ARM), plus Kiwix tools and the macOS 13 pin.
-  var UNIVERSAL_PROGRAM_GB = 8.0;
+  // Measured unpacked trees (2026-11-20): Windows 2.31 GB, each Mac folder 0.73 GB,
+  // Linux x64 5.11 GB and Linux ARM 3.92 GB (about 12.8 GB together). Linux archives
+  // expand well past the compressed download. 14 GB sits above the measured 12.1 GB extra.
+  var UNIVERSAL_PROGRAM_GB = 14.0;
   // What a this-computer-only estimate already counts for programs.
   var ALREADY_COUNTED_GB = {
     "windows-x64": 2.5,

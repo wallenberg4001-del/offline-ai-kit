@@ -255,7 +255,8 @@ if ($Easy) {
   Write-Host '  2) All computers (universal drive)'
   Write-Host '     Programs for Windows, Mac (Apple chip and Intel) and Linux (64-bit PC and ARM).'
   Write-Host '     One shared copy of the models, Wikipedia, extra libraries and maps.'
-  Write-Host ("     Extra download for the other computers: about {0:N1} GB." -f $extraNow)
+  if ($TestMode) { Write-Host '     Test mode does not download programs for other computers.' }
+  else { Write-Host ("     Extra download for the other computers: about {0:N1} GB." -f $extraNow) }
   if ($Universal) { Write-Host '  Chosen on the command line: All computers (universal drive)'; $universal = $true }
   else {
     $defU = '1'; if ((Get-Setting 'UNIVERSAL' 'no') -match '^(?i)(yes|true|1|2)$') { $defU = '2' }
@@ -278,7 +279,7 @@ $extraGB = 0.0; foreach ($e in $extraSel) { if (-not (Get-ExtraInstalled $e)) { 
 $mapGB = Get-MapDownloadGB $mapSel
 $estGB += $extraGB + $mapGB
 $extraProg = 0.0
-if ($universal) { $extraProg = Get-UniversalExtraGB; $estGB += $extraProg }
+if ($universal -and -not $TestMode) { $extraProg = Get-UniversalExtraGB; $estGB += $extraProg }
 $free = Get-FreeBytes $Kit
 
 # Summary (Step 8 in the wizard)
@@ -290,7 +291,10 @@ Write-Host ("  Extra libraries:  {0}" -f $(if ($extraSel.Count) { (($extraSel | 
 Write-Host ("  Offline maps:     {0}" -f $(if ($mapSel.Count) { (($mapSel | ForEach-Object { $_.Id }) -join ', ') + ' (' + (Format-Size $mapGB) + ', shared files counted once)' } else { 'none' }))
 Write-Host ("  Share on Wi-Fi:   {0}" -f $(if ($shareChoice) { 'ON (trusted home Wi-Fi only)' } else { 'off' }))
 Write-Host ("  Computers:        {0}" -f $(if ($universal) { 'All computers (universal drive)' } else { 'This computer only' }))
-if ($universal) { Write-Host ("  Extra programs:   about {0:N1} GB (other computers). Library, models and maps stay one shared copy." -f $extraProg) }
+if ($universal) {
+  if ($TestMode) { Write-Host '  Extra programs:   not downloaded in test mode.' }
+  else { Write-Host ("  Extra programs:   about {0:N1} GB (other computers). Library, models and maps stay one shared copy." -f $extraProg) }
+}
 $totalGB = $estGB; if ($wantWiki) { $totalGB += $WikipediaGB }
 Write-Host ("  Download now:     about {0:N1} GB   (with Wikipedia later: about {1:N1} GB in total)" -f $estGB, $totalGB)
 Write-Host ("  Free space:       {0} on this drive" -f (Format-GB $free))

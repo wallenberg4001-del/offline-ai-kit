@@ -37,7 +37,7 @@ There is **one file to double-click**. Pick the line that matches your computer:
 7. **Which computers** – **This computer only**, or **All computers (universal drive)**. Universal downloads the
    programs for Windows, Mac (Apple chip and Intel) and Linux (64-bit PC and ARM) so one exFAT drive works on each.
    Models, Wikipedia, extra libraries and maps stay **one shared copy**. The summary shows the extra disk space
-   (about 5.5 GB more on Windows, about 7 GB more on Mac and Linux, on top of this computer's programs).
+   (about 11.5 GB more on Windows, about 13 GB more on Mac and Linux, on top of this computer's programs).
 8. **Summary** – every choice, the total download size and your free space, then **Proceed? (Y/N)**.
 
 **How do I check which Mac I have?** Click the **Apple menu** () in the top-left corner, then **About This Mac**.
@@ -432,11 +432,10 @@ by itself so Wikipedia appears. Progress shows in `STATUS-MAC.command` and at th
 
 ### Mac notes
 
-- The chat page is opened straight from the kit folder (`www/chat.html`) instead of from a little web server,
-  because new Macs don't come with Python or another dependable built-in web server. The kit's own Ollama is
-  set to accept requests from that page. Everything still only listens on `127.0.0.1` (this Mac).
-- With **Share on Wi-Fi** on, the Mac also runs a tiny web server for phones (port 8091), using the `perl` that is
-  built into macOS (no Python or developer tools needed), and the chat page opens from `http://127.0.0.1:8091`.
+- The chat page is served at `http://127.0.0.1:8091` by a tiny web server. On Mac that server is the `perl`
+  built into macOS (no Python or developer tools needed). It listens only on this Mac unless **Share on Wi-Fi**
+  is on, which also opens port 8091 to the home network. If the server does not start, the page opens from
+  `www/chat.html`.
 - Use **Chrome, Safari or Firefox**; if Safari won't connect, try Chrome or Firefox.
 - The kit's Ollama runs on port 11435 with its models in `ollama-models/` and its settings in `home/`;
   an Ollama app you installed yourself (port 11434) is never touched.
@@ -518,8 +517,9 @@ Only one model is loaded at a time, so they don't add up in GPU memory.
 - A **portable Ollama** runs the AI models on `127.0.0.1:11435`. Models, settings and keys stay
   inside the kit folder (`ollama-models\`, `home\`). It does **not** touch a normal Ollama install
   (which uses port 11434), so you can have both.
-- On Windows a tiny PowerShell web server shows the chat page on `127.0.0.1:8091`. No Python needed.
-  On Mac the page is opened directly from the kit folder (see Mac notes).
+- A tiny web server shows the chat page on `127.0.0.1:8091` (Windows: PowerShell, Mac: the built-in `perl`,
+  Linux: `python3`). It listens on the home network only when Share on Wi-Fi is on. If it does not start, the
+  page opens from the kit folder.
 - **Share on Wi-Fi** (off by default): only the chat page server (port 8091) listens on the home network. It passes
   chat requests on to the AI program and library pages on to Kiwix. The AI program (port 11435) and the library
   (port 8090) always stay on `127.0.0.1`; only chat/list requests and read-only library pages are passed through. The QR code is made inside the page, offline.

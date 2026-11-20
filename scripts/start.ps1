@@ -44,7 +44,13 @@ Write-Host '[4/4] Full English Wikipedia...'
 $wv = Get-ChildItem -LiteralPath $VerifiedDir -Filter "$WikipediaPrefix*.zim" -ErrorAction SilentlyContinue |
       Where-Object { Test-Path -LiteralPath (Join-Path $Library $_.Name) } | Select-Object -First 1
 if ($wv) { Write-Host "  Ready: $($wv.Name)" -ForegroundColor Green }
-elseif ($SkipWikipedia) { Write-Host '  Switched off (SKIP_WIKIPEDIA=yes in kit-settings.ini). Everything else works.' }
+elseif ($SkipWikipedia) {
+  if ($KitSettings.ContainsKey('SKIP_WIKIPEDIA') -and ($KitSettings['SKIP_WIKIPEDIA'] -match '^(?i)(yes|true|1|on)$')) {
+    Write-Host '  Switched off (SKIP_WIKIPEDIA=yes in kit-settings.ini). Everything else works.'
+  } else {
+    Write-Host '  Wikipedia is switched off. Everything else works.'
+  }
+}
 elseif (Get-KitProcess 'wikipedia-download') { Write-Host '  Still downloading in its own window (look for it on the taskbar).' }
 else {
   $ps = Join-Path $PSHOME 'powershell.exe'

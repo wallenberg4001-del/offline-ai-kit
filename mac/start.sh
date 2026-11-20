@@ -36,16 +36,19 @@ else say "[2/3] AI model server (port $OLLAMA_PORT, separate from any normal Oll
 [ "$AI_AVAILABLE" = yes ] && { start_ollama || true; }
 [ "${KIT_OS:-mac}" != linux ] && [ "$MAC_ARCH" = x86_64 ] && [ "$AI_AVAILABLE" = yes ] && say "  Intel Mac: answers take longer than on Apple-chip Macs (often 10-60 seconds). That is normal."
 stop_kit chat-server >/dev/null
-if [ "$SHARE_ON_WIFI" = yes ]; then
-  say "  Share on Wi-Fi is ON: starting the chat page server for phones and tablets..."
-  start_chat_server || true
-fi
+say "Chat page (port $CHAT_PORT)..."
+if [ "$SHARE_ON_WIFI" = yes ]; then say "  Share on Wi-Fi is ON: the chat page is also open to your home network."; fi
+start_chat_server || true
 
 say "[3/3] Full English Wikipedia..."
 if f="$(wikipedia_verified)"; then
   ok "  Ready: $f"; write_wiki_status "done" 0 0 100 0 "Wikipedia ready: $f"
 elif [ "$SKIP_WIKIPEDIA" = yes ]; then
-  say "  Switched off (SKIP_WIKIPEDIA=yes in kit-settings.ini). Everything else works."
+  if is_yes "$(setting SKIP_WIKIPEDIA no)"; then
+    say "  Switched off (SKIP_WIKIPEDIA=yes in kit-settings.ini). Everything else works."
+  else
+    say "  Wikipedia is switched off. Everything else works."
+  fi
   write_wiki_status off 0 0 0 0 "Wikipedia is switched off"
 elif kit_pid wiki-download >/dev/null; then
   say "  Still downloading in the background ($LAUNCH_STATUS shows progress)."
@@ -58,7 +61,7 @@ else
 fi
 
 CHAT_URL="$WWW_DIR/chat.html"
-if [ "$SHARE_ON_WIFI" = yes ] && kit_pid chat-server >/dev/null; then CHAT_URL="http://127.0.0.1:$CHAT_PORT/chat.html"; fi
+if kit_pid chat-server >/dev/null; then CHAT_URL="http://127.0.0.1:$CHAT_PORT/chat.html"; fi
 if ! is_yes "${OFFLINE_AI_NO_BROWSER:-no}"; then
   say ""
   if [ "$AI_AVAILABLE" = yes ]; then say "Opening the chat page and the Offline Library in your browser..."; open_url "$CHAT_URL"

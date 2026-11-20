@@ -2,13 +2,88 @@
 # One shared library, models and maps. No symlinks: archives are unpacked and any
 # link inside them is turned into a real copy (Repair-ExtractedLinks).
 
+# Static zstd v1.5.6-bcr2. Same pins as mac/lib.sh. Stock tar on some PCs cannot read .tar.zst.
+$script:ZstdToolBase = 'https://github.com/aspect-build/zstd-prebuilt/releases/download/v1.5.6-bcr2'
+$script:HostZstdSha = @{
+  'zstd_darwin_amd64' = 'd81be8618553d7d658e09da669ffd68ec76d8095161a590c9b8a1a99fce67ca8'
+  'zstd_darwin_arm64' = '9848858f7332effb071818f282b3ac3052085e3dafa9ae09f0060b7e211a80dc'
+  'zstd_linux_amd64' = '190c196b46883a234238d9c52a211c1494df79bb170fbe30c6fc22639d5d4731'
+  'zstd_linux_arm64' = '4fa2386a975c2120f91f3103bd4268a19a341cb9063417f3829018e94f28c8c6'
+  'zstd_windows_x86_64.exe' = '8765d39af6a89f5b7b05854d08027e739c8f2245c4488c8365b3ddaf5cdbcf28'
+  'zstd_windows_arm64.exe' = 'ef983e169862f9d32652c9017e500052bd31ce5a2c7cb16bccdb71bcfa90c884'
+}
+
+function Get-HostZstd {
+  # A zstd.exe for this PC, from PATH or a checksum-checked download. Empty if this PC has no pin.
+  $cmd = Get-Command zstd.exe -ErrorAction SilentlyContinue
+  if (-not $cmd) { $cmd = Get-Command zstd -ErrorAction SilentlyContinue }
+  if ($cmd -and $cmd.Source) { return $cmd.Source }
+  $arch = $env:PROCESSOR_ARCHITECTURE
+  if ($env:PROCESSOR_ARCHITEW6432) { $arch = $env:PROCESSOR_ARCHITEW6432 }
+  $name = 'zstd_windows_x86_64.exe'
+  if ($arch -eq 'ARM64') { $name = 'zstd_windows_arm64.exe' }
+  $want = $script:HostZstdSha[$name]
+  if (-not $want) { return '' }
+  $dir = Join-Path $Runtime '_host-tools'
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  $dest = Join-Path $dir $name
+  $ok = $false
+  if (Test-Path -LiteralPath $dest) {
+    if ((Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash.ToLower() -eq $want) { $ok = $true }
+  }
+  if (-not $ok) {
+    Write-Host '  Getting a small zstd program so this computer can open Linux archives...'
+    if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Force }
+    Save-ResumableFile -Url ($script:ZstdToolBase + '/' + $name) -OutFile $dest -Label 'zstd' -MaxTries 5
+    if ((Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash.ToLower() -ne $want) {
+      Remove-Item -LiteralPath $dest -Force
+      throw 'The zstd program was damaged (checksum mismatch). Run setup again.'
+    }
+  }
+  return $dest
+}
+
+function Expand-ZstdTar([string]$File, [string]$Dest, [string]$Zstd) {
+  # Stream zstd into tar. PowerShell's pipe would corrupt the bytes, so this uses the process streams.
+  $tar = Join-Path $env:SystemRoot 'System32\tar.exe'
+  $psiZ = New-Object System.Diagnostics.ProcessStartInfo
+  $psiZ.FileName = $Zstd
+  $psiZ.Arguments = '-dc "' + $File + '"'
+  $psiZ.RedirectStandardOutput = $true
+  $psiZ.UseShellExecute = $false
+  $psiZ.CreateNoWindow = $true
+  $pz = New-Object System.Diagnostics.Process
+  $pz.StartInfo = $psiZ
+  [void]$pz.Start()
+  $psiT = New-Object System.Diagnostics.ProcessStartInfo
+  $psiT.FileName = $tar
+  $psiT.Arguments = '-xf - -C "' + $Dest + '"'
+  $psiT.RedirectStandardInput = $true
+  $psiT.UseShellExecute = $false
+  $psiT.CreateNoWindow = $true
+  $pt = New-Object System.Diagnostics.Process
+  $pt.StartInfo = $psiT
+  [void]$pt.Start()
+  try { $pz.StandardOutput.BaseStream.CopyTo($pt.StandardInput.BaseStream) }
+  finally { try { $pt.StandardInput.Close() } catch {} }
+  $pz.WaitForExit()
+  $pt.WaitForExit()
+  if ($pz.ExitCode -ne 0 -or $pt.ExitCode -ne 0) { throw "Could not unpack $File" }
+}
+
 function Expand-ProgramArchive([string]$File, [string]$Dest) {
   New-Item -ItemType Directory -Force -Path $Dest | Out-Null
   if ($File -match '\.zip$') {
     Expand-Archive -LiteralPath $File -DestinationPath $Dest -Force
   } else {
     & tar.exe -xf $File -C $Dest
-    if ($LASTEXITCODE -ne 0) { throw "Could not unpack $File" }
+    if ($LASTEXITCODE -ne 0) {
+      if ($File -notmatch '\.tar\.zst$' -and $File -notmatch '\.zst$') { throw "Could not unpack $File" }
+      Get-ChildItem -LiteralPath $Dest -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      $z = Get-HostZstd
+      if (-not $z) { throw "Could not unpack $File. This file is compressed with zstd, and this computer could not read it." }
+      Expand-ZstdTar $File $Dest $z
+    }
   }
   Repair-ExtractedLinks $Dest
 }
@@ -71,16 +146,40 @@ function Install-OllamaAsset([string]$Dest, [string]$Asset, [string]$Base, [stri
   if (-not $want) { throw 'Could not read the Ollama checksum list.' }
   if ($PinnedSha -and ($want -ne $PinnedSha.ToLower())) { throw "The Ollama checksum online does not match the one built into this kit. Not installing it." }
   $zip = Join-Path $Runtime $Asset
-  Save-ResumableFile -Url ($Base + $Asset) -OutFile $zip -Label "Downloading Ollama ($Asset)" -MaxTries 20
-  if ((Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLower() -ne $want) {
-    Remove-Item -LiteralPath $zip -Force
-    throw 'Ollama download was damaged (checksum mismatch). Run setup again.'
+  # A failed unpack leaves this file. Reuse it when the checksum still matches.
+  $have = ''
+  if (Test-Path -LiteralPath $zip) { $have = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLower() }
+  if ($have -eq $want) {
+    Write-Host "  Using the checked download already on the drive: $Asset"
+  } else {
+    Save-ResumableFile -Url ($Base + $Asset) -OutFile $zip -Label "Downloading Ollama ($Asset)" -MaxTries 20
+    if ((Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLower() -ne $want) {
+      Remove-Item -LiteralPath $zip -Force
+      throw 'Ollama download was damaged (checksum mismatch). Run setup again.'
+    }
   }
-  if (Test-Path -LiteralPath $Dest) { Remove-Item -LiteralPath $Dest -Recurse -Force }
+  # Unpack beside the platform folder. A failure leaves that folder, and a checked .tar.zst, alone.
+  $tmp = Join-Path $Runtime ('_unpack-' + $Asset)
+  if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Recurse -Force }
   Write-Host '  Unpacking...'
-  Expand-ProgramArchive $zip $Dest
+  try { Expand-ProgramArchive $zip $tmp }
+  catch {
+    if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Recurse -Force }
+    if ($Asset -like '*.tar.zst' -or $Asset -like '*.zst') { Write-Host "Left the checked download in place: $zip" -ForegroundColor Yellow }
+    else { Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue }
+    throw
+  }
+  if (-not (Test-TreeFile $tmp @('ollama.exe', 'ollama'))) {
+    if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Recurse -Force }
+    if ($Asset -like '*.tar.zst' -or $Asset -like '*.zst') { Write-Host "Left the checked download in place: $zip" -ForegroundColor Yellow }
+    else { Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue }
+    throw 'Ollama did not unpack as expected.'
+  }
+  $parent = Split-Path -Parent $Dest
+  New-Item -ItemType Directory -Force -Path $parent | Out-Null
+  if (Test-Path -LiteralPath $Dest) { Remove-Item -LiteralPath $Dest -Recurse -Force }
+  Move-Item -LiteralPath $tmp -Destination $Dest
   Remove-Item -LiteralPath $zip -Force
-  if (-not (Test-TreeFile $Dest @('ollama.exe', 'ollama'))) { throw 'Ollama did not unpack as expected.' }
   Write-Host '  Installed.' -ForegroundColor Green
 }
 
@@ -144,16 +243,33 @@ function Install-WindowsPrograms {
 function Install-UniversalPrograms {
   Write-Host 'All computers (universal drive): programs for Windows, Mac and Linux.'
   Write-Host 'Models, Wikipedia, extra libraries and maps stay one shared copy.'
-  Install-WindowsPrograms
+  # One platform failing must not skip the rest, and must not remove folders that already installed.
+  $failed = @()
   $rel = 'href="(kiwix-tools_{0}-(\d+)\.(\d+)\.(\d+)(?:-(\d+))?{1})"'
-  Install-KiwixAsset (Join-Path $Runtime 'mac-arm64\kiwix') ($rel -f 'macos-arm64', '\.tar\.gz') 'macOS Apple chip' ''
-  Install-KiwixAsset (Join-Path $Runtime 'mac-x64\kiwix') ($rel -f 'macos-x86_64', '\.tar\.gz') 'macOS Intel' ''
-  Install-KiwixAsset (Join-Path $Runtime 'linux-x64\kiwix') ($rel -f 'linux-x86_64', '\.tar\.gz') 'Linux 64-bit PC' (Join-Path $Runtime 'linux-x64\LIBC')
-  Install-KiwixAsset (Join-Path $Runtime 'linux-arm64\kiwix') ($rel -f 'linux-aarch64', '\.tar\.gz') 'Linux ARM' (Join-Path $Runtime 'linux-arm64\LIBC')
-  Install-DarwinOllamaCopies 'current'
-  Install-DarwinOllamaCopies 'pinned'
   $ollamaBase = 'https://github.com/ollama/ollama/releases/latest/download/'
-  Install-OllamaAsset (Join-Path $Runtime 'linux-x64\ollama') 'ollama-linux-amd64.tgz' $ollamaBase ''
-  Install-OllamaAsset (Join-Path $Runtime 'linux-arm64\ollama') 'ollama-linux-arm64.tgz' $ollamaBase ''
+  $steps = @(
+    @{ Name = 'windows'; Action = { Install-WindowsPrograms } }
+    @{ Name = 'mac-arm64/kiwix'; Action = { Install-KiwixAsset (Join-Path $Runtime 'mac-arm64\kiwix') ($rel -f 'macos-arm64', '\.tar\.gz') 'macOS Apple chip' '' } }
+    @{ Name = 'mac-x64/kiwix'; Action = { Install-KiwixAsset (Join-Path $Runtime 'mac-x64\kiwix') ($rel -f 'macos-x86_64', '\.tar\.gz') 'macOS Intel' '' } }
+    @{ Name = 'linux-x64/kiwix'; Action = { Install-KiwixAsset (Join-Path $Runtime 'linux-x64\kiwix') ($rel -f 'linux-x86_64', '\.tar\.gz') 'Linux 64-bit PC' (Join-Path $Runtime 'linux-x64\LIBC') } }
+    @{ Name = 'linux-arm64/kiwix'; Action = { Install-KiwixAsset (Join-Path $Runtime 'linux-arm64\kiwix') ($rel -f 'linux-aarch64', '\.tar\.gz') 'Linux ARM' (Join-Path $Runtime 'linux-arm64\LIBC') } }
+    @{ Name = 'mac-ollama'; Action = { Install-DarwinOllamaCopies 'current' } }
+    @{ Name = 'mac-ollama-v0.12.9'; Action = { Install-DarwinOllamaCopies 'pinned' } }
+    @{ Name = 'linux-x64/ollama'; Action = { Install-OllamaAsset (Join-Path $Runtime 'linux-x64\ollama') 'ollama-linux-amd64.tgz' $ollamaBase '' } }
+    @{ Name = 'linux-arm64/ollama'; Action = { Install-OllamaAsset (Join-Path $Runtime 'linux-arm64\ollama') 'ollama-linux-arm64.tgz' $ollamaBase '' } }
+  )
+  foreach ($step in $steps) {
+    try { & $step.Action }
+    catch {
+      Write-Host $_.Exception.Message -ForegroundColor Red
+      $failed += $step.Name
+    }
+  }
   Resolve-KitRuntime
+  if ($failed.Count -gt 0) {
+    Write-Host ('Some programs for other computers were not installed: ' + ($failed -join ', ')) -ForegroundColor Red
+    Write-Host 'Programs that installed were left in place. Run setup again to finish the rest.'
+    Write-Host 'A checked .tar.zst is kept, so a failed Linux download is not fetched again.'
+    throw 'Universal program install was incomplete.'
+  }
 }

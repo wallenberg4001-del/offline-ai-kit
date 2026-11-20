@@ -412,8 +412,8 @@
       el.style.display = "block";
   }
 
-  // Windows serves this page over http and has /status.json.
-  // On Mac the page is opened as a file, so the kit writes wiki-status.js next to it instead.
+  // Served over http, this page reads /status.json.
+  // If the page was opened as a file, the kit writes wiki-status.js next to it instead.
   async function wikiStatus() {
     if (location.protocol === "file:") {
       const old = document.getElementById("wikiStatusScript");

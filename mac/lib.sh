@@ -428,7 +428,7 @@ write_wiki_status() { # state bytes total percent mbps message
   msg="$(json_escape "$6")"
   json="{\"state\":\"$1\",\"bytes\":$2,\"total\":$3,\"percent\":$4,\"mbps\":$5,\"message\":\"$msg\",\"updated\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
   printf '%s\n' "$json" > "$WIKI_PROGRESS" 2>/dev/null || true
-  # The chat page is opened as a file on macOS, so it reads this .js instead of JSON.
+  # Also written as .js so a page opened as a file can still read it.
   printf 'window.WIKI_STATUS = %s;\n' "$json" > "$WIKI_STATUS_JS" 2>/dev/null || true
 }
 
@@ -623,7 +623,7 @@ start_ollama() {
   bin="$(ollama_bin)" || { err "  Ollama is missing. Run $LAUNCH_SETUP first."; return 1; }
   ensure_dirs
   # Kit-only environment: models, keys and settings stay inside the kit folder.
-  # OLLAMA_ORIGINS=* lets the chat page (opened as a local file) talk to it; it only listens on 127.0.0.1.
+  # OLLAMA_ORIGINS=* lets a page opened as a file talk to it. The server only listens on 127.0.0.1.
   # ARCH_CMD is empty or "arch -x86_64" / "arch -arm64" (two words on purpose).
   # shellcheck disable=SC2086
   HOME="$HOME_DIR" OLLAMA_HOST="127.0.0.1:$OLLAMA_PORT" OLLAMA_MODELS="$MODELS_DIR" \
@@ -762,7 +762,7 @@ set_share_on_wifi() { # set_share_on_wifi yes|no [apply]
   say "  Restarting the chat page server..."
   write_chat_config
   stop_kit chat-server
-  [ "$SHARE_ON_WIFI" = yes ] && { start_chat_server || true; }
+  start_chat_server || true
   return 0
 }
 
@@ -925,7 +925,7 @@ make_linux_desktop() {
 
 # ---------- Which computer is this, and where its programs live ----------
 # Keep folder names and the missing-program sentences in step with www/universal.js.
-UNIVERSAL_PROGRAM_GB=8.0
+UNIVERSAL_PROGRAM_GB=14.0
 dir_has_ollama() {
   [ -f "$1/ollama" ] || [ -f "$1/bin/ollama" ] || [ -f "$1/ollama.exe" ] || [ -f "$1/bin/ollama.exe" ]
 }
@@ -982,6 +982,66 @@ clear_quarantine() {
   [ -e "$1" ] || return 0
   xattr -dr com.apple.quarantine "$1" 2>/dev/null || true
 }
+# Static zstd v1.5.6-bcr2. Stock macOS tar cannot read .tar.zst, and some Windows tar cannot either.
+# Same pins as scripts/programs.ps1. The checked file is cached under runtime/_host-tools.
+# zstd_windows_x86_64.exe 8765d39af6a89f5b7b05854d08027e739c8f2245c4488c8365b3ddaf5cdbcf28
+# zstd_windows_arm64.exe ef983e169862f9d32652c9017e500052bd31ce5a2c7cb16bccdb71bcfa90c884
+ZSTD_TOOL_BASE="https://github.com/aspect-build/zstd-prebuilt/releases/download/v1.5.6-bcr2"
+ZSTD_BIN=""
+host_zstd_spec() { # prints "<file> <sha256>" for the computer running setup
+  local arch
+  arch="$(uname -m)"
+  case "$(uname -s)" in
+    Darwin)
+      if [ "$arch" = arm64 ] || [ "$(sysctl -n hw.optional.arm64 2>/dev/null || true)" = 1 ]; then
+        printf '%s %s\n' zstd_darwin_arm64 9848858f7332effb071818f282b3ac3052085e3dafa9ae09f0060b7e211a80dc
+      else
+        printf '%s %s\n' zstd_darwin_amd64 d81be8618553d7d658e09da669ffd68ec76d8095161a590c9b8a1a99fce67ca8
+      fi
+      ;;
+    Linux)
+      case "$arch" in
+        aarch64|arm64) printf '%s %s\n' zstd_linux_arm64 4fa2386a975c2120f91f3103bd4268a19a341cb9063417f3829018e94f28c8c6 ;;
+        *) printf '%s %s\n' zstd_linux_amd64 190c196b46883a234238d9c52a211c1494df79bb170fbe30c6fc22639d5d4731 ;;
+      esac
+      ;;
+  esac
+}
+ensure_zstd() { # sets ZSTD_BIN to a zstd that can decompress. Downloads one if this computer has none.
+  local spec file want dest got cache run
+  ZSTD_BIN=""
+  if command -v zstd >/dev/null 2>&1; then ZSTD_BIN="$(command -v zstd)"; return 0; fi
+  if [ -x /opt/homebrew/bin/zstd ]; then ZSTD_BIN=/opt/homebrew/bin/zstd; return 0; fi
+  if [ -x /usr/local/bin/zstd ]; then ZSTD_BIN=/usr/local/bin/zstd; return 0; fi
+  spec="$(host_zstd_spec)"
+  [ -n "$spec" ] || return 1
+  file="${spec%% *}"
+  want="${spec##* }"
+  dest="$RUNTIME/_host-tools/$file"
+  if [ ! -f "$dest" ] || [ "$(sha256_of "$dest")" != "$want" ]; then
+    say "  Getting a small zstd program so this computer can open Linux archives..."
+    mkdir -p "$RUNTIME/_host-tools"
+    rm -f "$dest"
+    download_resumable "$ZSTD_TOOL_BASE/$file" "$dest" 0 "zstd" no 5 || return 1
+    got="$(sha256_of "$dest")"
+    if [ "$got" != "$want" ]; then rm -f "$dest"; err "The zstd program was damaged (checksum mismatch). Run setup again."; return 1; fi
+  fi
+  chmod +x "$dest" 2>/dev/null || true
+  clear_quarantine "$dest"
+  run="$dest"
+  if [ ! -x "$run" ] || ! "$run" --version >/dev/null 2>&1; then
+    if [ "$(uname -s)" = Darwin ]; then cache="$HOME/Library/Caches/offline-ai-kit"
+    else cache="${XDG_CACHE_HOME:-$HOME/.cache}/offline-ai-kit"; fi
+    mkdir -p "$cache"
+    cp -f "$dest" "$cache/$file"
+    chmod +x "$cache/$file" 2>/dev/null || true
+    clear_quarantine "$cache/$file"
+    run="$cache/$file"
+  fi
+  if ! "$run" --version >/dev/null 2>&1; then err "Could not run the zstd program ($file)."; return 1; fi
+  ZSTD_BIN="$run"
+  return 0
+}
 unpack_archive() { # unpack_archive <archive> <dest>
   local file="$1" dest="$2"
   mkdir -p "$dest"
@@ -994,10 +1054,20 @@ unpack_archive() { # unpack_archive <archive> <dest>
       return 1
       ;;
     *)
-      tar -xf "$file" -C "$dest" 2>/dev/null && return 0
-      tar --zstd -xf "$file" -C "$dest" 2>/dev/null && return 0
-      if command -v zstd >/dev/null 2>&1 && zstd -dc "$file" | tar -xf - -C "$dest"; then return 0; fi
-      err "Could not unpack $file. Install the zstd package and run setup again."
+      if tar -xf "$file" -C "$dest" 2>/dev/null; then return 0; fi
+      case "$file" in
+        *.zst|*.tar.zst) ;;
+        *) err "Could not unpack $file."; return 1 ;;
+      esac
+      # The first tar can leave a partial tree when it cannot read zstd.
+      rm -rf "$dest"
+      mkdir -p "$dest"
+      if tar --zstd -xf "$file" -C "$dest" 2>/dev/null; then return 0; fi
+      rm -rf "$dest"
+      mkdir -p "$dest"
+      if ensure_zstd && (set -o pipefail; "$ZSTD_BIN" -dc "$file" | tar -xf - -C "$dest"); then return 0; fi
+      err "Could not unpack $file."
+      err "This file is compressed with zstd, and this computer could not read it."
       return 1
       ;;
   esac
@@ -1108,7 +1178,7 @@ install_kiwix_tools() { # [dest] [filename-regex] [label] [libc]
   select_runtime_dirs
 }
 install_one_ollama() { # install_one_ollama <dest> <asset> <base-url> [pinned]
-  local dest="$1" asset="$2" base="$3" pin="${4:-}" sums want archive
+  local dest="$1" asset="$2" base="$3" pin="${4:-}" sums want archive tmp
   if dir_has_ollama "$dest"; then ok "  Already installed."; return 0; fi
   sums="$(curl_text "${base}sha256sum.txt" || true)"
   want="$(ollama_sha_for "$sums" "$asset")"
@@ -1122,15 +1192,40 @@ install_one_ollama() { # install_one_ollama <dest> <asset> <base-url> [pinned]
     err "The Ollama $OLLAMA_PIN_VERSION checksum online does not match the one built into this kit. Not installing it."; return 1
   fi
   archive="$RUNTIME/$asset"
-  download_resumable "$base$asset" "$archive" 0 "$asset" no 20 || return 1
-  if [ "$(sha256_of "$archive")" != "$want" ]; then rm -f "$archive"; err "Ollama download was damaged (checksum mismatch). Run setup again."; return 1; fi
+  # A failed unpack leaves this file. Reuse it when the checksum still matches.
+  if [ -f "$archive" ] && [ "$(sha256_of "$archive")" = "$want" ]; then
+    say "  Using the checked download already on the drive: $asset"
+  else
+    download_resumable "$base$asset" "$archive" 0 "$asset" no 20 || return 1
+    if [ "$(sha256_of "$archive")" != "$want" ]; then rm -f "$archive"; err "Ollama download was damaged (checksum mismatch). Run setup again."; return 1; fi
+  fi
+  # Unpack beside the platform folder. A failure leaves that folder, and a checked .tar.zst, alone.
+  tmp="$RUNTIME/_unpack-$asset"
+  rm -rf "$tmp"
+  mkdir -p "$tmp"
+  if ! unpack_archive "$archive" "$tmp"; then
+    rm -rf "$tmp"
+    case "$archive" in
+      *.tar.zst|*.zst) err "Left the checked download in place: $archive" ;;
+      *) rm -f "$archive" ;;
+    esac
+    return 1
+  fi
+  if ! dir_has_ollama "$tmp"; then
+    rm -rf "$tmp"
+    err "Ollama did not unpack as expected."
+    case "$archive" in
+      *.tar.zst|*.zst) err "Left the checked download in place: $archive" ;;
+      *) rm -f "$archive" ;;
+    esac
+    return 1
+  fi
+  materialize_symlinks "$tmp"
+  clear_quarantine "$tmp"
   rm -rf "$dest"
-  mkdir -p "$dest"
-  unpack_archive "$archive" "$dest" || { rm -f "$archive"; return 1; }
+  mkdir -p "$(dirname "$dest")"
+  if ! mv "$tmp" "$dest"; then err "Could not put Ollama into $dest. The checked download is still at $archive."; return 1; fi
   rm -f "$archive"
-  materialize_symlinks "$dest"
-  clear_quarantine "$dest"
-  dir_has_ollama "$dest" || { err "Ollama did not unpack as expected."; return 1; }
   ok "  Installed."
 }
 install_darwin_copies() { # install_darwin_copies current|pinned  (real copies in both Mac folders)
@@ -1175,22 +1270,29 @@ install_darwin_copies() { # install_darwin_copies current|pinned  (real copies i
   rm -rf "$tmp"
 }
 install_universal_programs() {
-  local base
+  local base failed=""
   if [ "$TEST_MODE" = yes ]; then warn "TEST MODE: not downloading programs for other computers."; return 0; fi
   say "All computers (universal drive): programs for Windows, Mac and Linux."
   say "Models, Wikipedia, extra libraries and maps stay one shared copy."
   base="https://github.com/ollama/ollama/releases/latest/download/"
-  install_kiwix_tools "$RUNTIME/windows-x64/kiwix" 'kiwix-tools_win-x86_64-[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?\.zip' "Windows x64" "" || return 1
-  install_kiwix_tools "$RUNTIME/mac-arm64/kiwix" 'kiwix-tools_macos-arm64-[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?\.tar\.gz' "macOS Apple chip" "" || return 1
-  install_kiwix_tools "$RUNTIME/mac-x64/kiwix" 'kiwix-tools_macos-x86_64-[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?\.tar\.gz' "macOS Intel" "" || return 1
-  install_kiwix_tools "$RUNTIME/linux-x64/kiwix" 'kiwix-tools_linux-x86_64-[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?\.tar\.gz' "Linux 64-bit PC" glibc || return 1
-  install_kiwix_tools "$RUNTIME/linux-arm64/kiwix" 'kiwix-tools_linux-aarch64-[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?\.tar\.gz' "Linux ARM" glibc || return 1
-  install_darwin_copies current || return 1
-  install_darwin_copies pinned || return 1
-  install_one_ollama "$RUNTIME/windows-x64/ollama" "ollama-windows-amd64.zip" "$base" "" || return 1
-  install_one_ollama "$RUNTIME/linux-x64/ollama" "ollama-linux-amd64.tgz" "$base" "" || return 1
-  install_one_ollama "$RUNTIME/linux-arm64/ollama" "ollama-linux-arm64.tgz" "$base" "" || return 1
+  # One platform failing must not skip the rest, and must not remove folders that already installed.
+  install_kiwix_tools "$RUNTIME/windows-x64/kiwix" 'kiwix-tools_win-x86_64-[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?\.zip' "Windows x64" "" || failed="$failed windows-x64/kiwix"
+  install_kiwix_tools "$RUNTIME/mac-arm64/kiwix" 'kiwix-tools_macos-arm64-[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?\.tar\.gz' "macOS Apple chip" "" || failed="$failed mac-arm64/kiwix"
+  install_kiwix_tools "$RUNTIME/mac-x64/kiwix" 'kiwix-tools_macos-x86_64-[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?\.tar\.gz' "macOS Intel" "" || failed="$failed mac-x64/kiwix"
+  install_kiwix_tools "$RUNTIME/linux-x64/kiwix" 'kiwix-tools_linux-x86_64-[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?\.tar\.gz' "Linux 64-bit PC" glibc || failed="$failed linux-x64/kiwix"
+  install_kiwix_tools "$RUNTIME/linux-arm64/kiwix" 'kiwix-tools_linux-aarch64-[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?\.tar\.gz' "Linux ARM" glibc || failed="$failed linux-arm64/kiwix"
+  install_darwin_copies current || failed="$failed mac-ollama"
+  install_darwin_copies pinned || failed="$failed mac-ollama-v0.12.9"
+  install_one_ollama "$RUNTIME/windows-x64/ollama" "ollama-windows-amd64.zip" "$base" "" || failed="$failed windows-x64/ollama"
+  install_one_ollama "$RUNTIME/linux-x64/ollama" "ollama-linux-amd64.tgz" "$base" "" || failed="$failed linux-x64/ollama"
+  install_one_ollama "$RUNTIME/linux-arm64/ollama" "ollama-linux-arm64.tgz" "$base" "" || failed="$failed linux-arm64/ollama"
   select_runtime_dirs
+  if [ -n "$failed" ]; then
+    err "Some programs for other computers were not installed:$failed"
+    err "Programs that installed were left in place. Run setup again to finish the rest."
+    err "A checked .tar.zst is kept, so a failed Linux download is not fetched again."
+    return 1
+  fi
 }
 install_portable_ollama() {
   local asset base pin=""

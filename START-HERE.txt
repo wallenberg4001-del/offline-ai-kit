@@ -169,8 +169,8 @@ still work when the internet or power is out.
  That downloads the programs for Windows, Mac (Apple chip
  and Intel) and Linux (64-bit PC and ARM). The library,
  models and maps are stored once. The summary shows the
- extra disk space before anything downloads (about 5.5 GB
- more on Windows, about 7 GB more on a Mac or Linux).
+ extra disk space before anything downloads (about 11.5 GB
+ more on Windows, about 13 GB more on a Mac or Linux).
 
  START picks the matching programs by itself
  (runtime/windows-x64, runtime/mac-arm64, runtime/mac-x64,
