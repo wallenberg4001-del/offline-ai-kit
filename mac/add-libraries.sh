@@ -57,7 +57,7 @@ if awk -v g="$GB" 'BEGIN { exit !(g > 50) }' && [ "$YES" != yes ]; then
   a=n; [ -t 0 ] && { read -r -p "That is a very big download. Continue? (Y/N) " a || true; }
   case "$a" in [Yy]*) ;; *) exit 0 ;; esac
 fi
-command -v caffeinate >/dev/null 2>&1 && { caffeinate -i -w "$$" >/dev/null 2>&1 & }
+stay_awake
 FAILED=""; ADDED=0
 for id in $SEL; do
   if install_extra "$id"; then ADDED=$((ADDED + 1)); else FAILED="$FAILED $id"; fi

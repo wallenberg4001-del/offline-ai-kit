@@ -12,16 +12,17 @@ There is **one file to double-click**. Pick the line that matches your computer:
 | 🪟 **Windows PC** | **`EASY-INSTALL (Windows).bat`** | |
 | 🍎 **Mac with an Apple chip** (M1, M2, M3, M4, M5) | **`EASY-INSTALL (Mac).command`** | Fastest Mac version. |
 | 🍏 **Older Mac with an Intel chip** | **the same `EASY-INSTALL (Mac).command`** | It works out which Mac you have by itself. The AI answers more slowly on Intel Macs. |
+| 🐧 **Linux** | **`EASY-INSTALL (Linux).sh`** | In a terminal: `bash "EASY-INSTALL (Linux).sh"`. No questions. |
 
 ### Two ways to install – pick one
 
-| I want… | Windows | Mac (Apple chip or Intel) |
-|---|---|---|
-| ⚡ **No questions** – just set it up with good choices for my computer | **`EASY-INSTALL (Windows).bat`** | **`EASY-INSTALL (Mac).command`** |
-| 🧭 **To choose my features** step by step (Setup Wizard) | **`SETUP.bat`** | **`SETUP-MAC.command`** |
+| I want… | Windows | Mac (Apple chip or Intel) | Linux |
+|---|---|---|---|
+| ⚡ **No questions** – just set it up with good choices for my computer | **`EASY-INSTALL (Windows).bat`** | **`EASY-INSTALL (Mac).command`** | **`EASY-INSTALL (Linux).sh`** |
+| 🧭 **To choose my features** step by step (Setup Wizard) | **`SETUP.bat`** | **`SETUP-MAC.command`** | **`SETUP-LINUX.sh`** |
 
 **EASY-INSTALL** picks the AI size for your computer, includes full Wikipedia (if there's room), leaves
-"Share on Wi-Fi" **off** and adds no extra libraries. You can change all of that later with **STATUS**.
+"Share on Wi-Fi" **off**, adds no extra libraries and downloads **no maps**. You can change all of that later with **STATUS**.
 
 **SETUP (the Setup Wizard)** asks, one screen at a time, before anything downloads:
 1. **AI model size** – it shows your computer and suggests the right size (press Enter to accept).
@@ -30,7 +31,10 @@ There is **one file to double-click**. Pick the line that matches your computer:
 4. **Extra Libraries** – optional extras such as Wiktionary, Project Gutenberg books, Stack Exchange Q&A and
    preparedness guides (type numbers like `1,3`, or `all`, or just press Enter for none).
 5. **Share on home Wi-Fi** for phones and tablets – off unless you say yes.
-6. **Summary** – every choice, the total download size and your free space, then **Proceed? (Y/N)**.
+6. **Offline maps** – optional. Vancouver Island, British Columbia and Alberta are inside the one Canada map
+   (about 10 GB; Kiwix does not publish those three places alone). Broader regions are separate files.
+   Press Enter for none. Easy Install skips this.
+7. **Summary** – every choice, the total download size and your free space, then **Proceed? (Y/N)**.
 
 **How do I check which Mac I have?** Click the **Apple menu** () in the top-left corner, then **About This Mac**.
 - If you see **Chip: Apple M1** (or M2, M3, M4, M5), you have an **Apple chip**.
@@ -42,7 +46,7 @@ it is a PC. Use the Windows file.
 ## How to get it
 
 1. **Download the kit:** go to the **[latest release](https://github.com/wallenberg4001-del/offline-ai-kit/releases/latest)**
-   and click **`Offline-AI-Kit-x.y.z.zip`** under **Assets** (for example `Offline-AI-Kit-1.1.0.zip`).
+   and click **`Offline-AI-Kit-x.y.z.zip`** under **Assets** (for example `Offline-AI-Kit-1.2.0.zip`).
    *(Or, on this page, click the green **Code** button, then **Download ZIP**. That works too.)*
 2. **Unzip it.**
    - **Windows:** right-click the ZIP, choose **Properties**, tick **Unblock**, click **OK**.
@@ -176,9 +180,22 @@ SHA-256 fingerprint, and appear in the library and in **Ask the library** straig
 Sizes change a little with each new edition. wikiHow is not offered because Kiwix no longer publishes it.
 The list lives in `catalog/extra-libraries.txt`.
 
+## Offline maps
+
+Optional regional maps you can add in the Setup Wizard (step 6) or any time from **STATUS → 3) Add offline maps**.
+They are clean offline browser maps from Kiwix (`zim/maps` on download.kiwix.org): the same mirror choice, resume
+and SHA-256 check as the rest of the library. Easy Install does not ask and does not download them.
+
+Vancouver Island, British Columbia and Alberta are easy choices. Kiwix publishes them inside the one Canada map
+(`maps_en_canada`, about 10 GB), not as three separate files. Picking more than one of those three downloads that
+file once. Broader regions (United States, North America, Europe, the whole world) are their own larger files.
+
+Open **Offline maps** on the chat page. With Share on Wi-Fi, a phone opens the same page through the chat address
+(port 8091). The map program itself stays on this computer.
+
 ## 🔄 Check for updates
 
-The chat page has a **Check for updates** button (and STATUS has **3) Check for updates**). It only runs when you
+The chat page has a **Check for updates** button (and STATUS has **4) Check for updates**). It only runs when you
 click it – the kit never contacts the internet on its own. It tells you whether you have the newest version; if a
 newer one exists it shows a link to what's new and to the download. **Nothing is downloaded or changed for you.**
 With no internet it simply says so – the kit doesn't need internet to run.
@@ -220,7 +237,7 @@ answer from the AI's own memory instead – clearly marked as **not** from the l
 **Can I turn the sources off?** Yes. Untick **Ask the library** at the top of the chat page. The AI then answers from
 its memory only (faster, but more likely to be wrong).
 
-**Can I put it on a USB/external drive?** Yes, and the same drive can be used on Windows, Apple-chip Macs and Intel Macs.
+**Can I put it on a USB/external drive?** Yes. Use exFAT, NTFS or APFS (not FAT32). See [Running from a USB drive](#running-from-a-usb-drive).
 
 **Do I need a gaming PC?** No. Lighter computers get the LITE version automatically (smaller library, two small AI models).
 
@@ -228,6 +245,19 @@ its memory only (faster, but more likely to be wrong).
 See `START-HERE.txt` for exactly what to click.
 
 **Can I share it?** Yes – it's MIT-licensed. Send the folder or the download link to anyone.
+
+## Running from a USB drive
+
+The whole kit folder can live on one USB drive and run on Windows, Mac and Linux. Format the drive as **exFAT**
+(or NTFS, or APFS). **FAT32 cannot store a file larger than 4 GB**, so setup refuses Wikipedia, the bigger
+libraries and the maps on a FAT32 drive and tells you to use exFAT, NTFS or APFS.
+
+- **Where it looks for free space.** The free-space check uses the drive the kit folder is on, including when Windows gives that drive a different letter the next time you plug it in.
+- **Drive letters.** Paths inside the kit are relative to the folder. The Desktop shortcut stores a full path, and **START** rewrites that shortcut every time, so run START from the USB after the letter changes.
+- **Execute permission on Mac and Linux.** exFAT often drops the execute bit, or refuses to run a program directly. Shell launchers still work. Start with `bash "/Volumes/YOURDRIVE/.../START-OFFLINE-AI-MAC.command"` or `bash "/media/.../START-OFFLINE-AI-LINUX.sh"`. If Kiwix or Ollama cannot be executed from the USB, the kit copies that program folder to a local cache (`~/Library/Caches/offline-ai-kit` on a Mac, `~/.cache/offline-ai-kit` on Linux) and runs the copy. Your library and models stay on the USB. The kit prints the exact `bash` command when it has to do this.
+- **No symlinks.** After each unpack the kit turns any symlink inside `runtime/` into a real copy, so the folder stays valid on exFAT.
+- **Stay awake.** Setup and the big downloads ask the computer not to sleep (Windows execution state, `caffeinate` on a Mac, `systemd-inhibit` on Linux when it is installed).
+- **Large files and a Mac.** `kiwix-serve` on macOS opens a ZIM with `mmap`. Apple's exFAT driver fails that call once a file is over 4 GB (`Invalid argument`). Windows and Linux open those same files. On a Mac, keep files over 4 GB on APFS or the internal disk. Files under 4 GB on the USB still open. The kit does not hide the ZIMs in a Mac-only disk image, because that would break the one-drive setup for Windows and Linux. If the library fails to start for this reason, START says so.
 
 ---
 
@@ -278,7 +308,8 @@ See `START-HERE.txt` for exactly what to click.
    - **Step 3 – Full English Wikipedia** – `Y` or `N`.
    - **Step 4 – Extra Libraries** – numbers like `1,3`, `all`, or Enter for none.
    - **Step 5 – Share on home Wi-Fi** – `N` (default) or `Y`.
-   - **Step 6 – Summary** – check the sizes and free space, then `Y` to start downloading (`N` changes nothing).
+   - **Step 6 – Offline maps** – numbers like `1,4`, `all`, or Enter for none. The first three choices share one Canada file.
+   - **Step 7 – Summary** – check the sizes and free space, then `Y` to start downloading (`N` changes nothing).
 3. Wait. It downloads the programs, the library and the AI models, and **checks every file**
    against the official checksum so nothing is corrupted. If the internet drops, just run
    `SETUP.bat` again – it picks up where it stopped.
@@ -404,8 +435,22 @@ by itself so Wikipedia appears. Progress shows in `STATUS-MAC.command` and at th
 - **Apple chip or Intel** is read from the hardware (`sysctl hw.optional.arm64`), so an Apple-chip Mac whose Terminal
   runs under Rosetta still gets the fast Apple-chip programs. Kiwix comes from `kiwix-tools_macos-arm64` or
   `kiwix-tools_macos-x86_64`; Ollama's `ollama-darwin.tgz` contains both.
-- One kit folder on an external drive can be used from Windows, Apple-chip Macs **and** Intel Macs: the library and
-  models are shared; each kind of computer keeps its own programs in `runtime/`.
+- One kit folder on an external drive can be used from Windows, Apple-chip Macs, Intel Macs **and Linux**: the library and
+  models are shared; each kind of computer keeps its own programs in `runtime/` (`runtime/ollama` and `runtime/kiwix` on Windows, `runtime/mac-*` on a Mac, `runtime/linux-ollama` and `runtime/linux-kiwix` on Linux). See [Running from a USB drive](#running-from-a-usb-drive).
+
+## Linux
+
+Same kit and the same Setup Wizard. In a terminal, from the kit folder:
+
+```bash
+bash "EASY-INSTALL (Linux).sh"     # no questions
+bash SETUP-LINUX.sh                # wizard, including optional maps
+bash START-OFFLINE-AI-LINUX.sh
+bash STATUS-LINUX.sh
+bash STOP-OFFLINE-AI-LINUX.sh
+```
+
+Linux downloads `kiwix-tools_linux-x86_64` or `kiwix-tools_linux-aarch64` (the musl build when `ldd --version` says musl) and `ollama-linux-amd64.tgz` or `ollama-linux-arm64.tgz`. The chat page server is `mac/serve-chat.py`. The address phones use comes from `ip route get` (the `src` address). Ollama stays on `127.0.0.1:11435` and Kiwix on `127.0.0.1:8090`. Port 8091 is open to the network only when Share on Wi-Fi is on. On x86_64, Easy Install uses the smaller CPU-sized models (same idea as an Intel Mac); the wizard can choose a larger set.
 
 ---
 

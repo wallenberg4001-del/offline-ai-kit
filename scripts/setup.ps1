@@ -18,7 +18,8 @@ param(
   [switch]$DetectOnly,            # just show the hardware check and chosen profile, then exit
   [switch]$Yes,
   [switch]$ShareWifi,              # turn on Share on Wi-Fi (phones/tablets on the home network)
-  [string]$ExtraLibraries = ''     # comma list of Extra Library ids or numbers (catalog\extra-libraries.txt), or 'all'
+  [string]$ExtraLibraries = '',    # comma list of Extra Library ids or numbers (catalog\extra-libraries.txt), or 'all'
+  [string]$Maps = ''               # comma list of map ids or numbers (catalog\maps.txt), or 'all'. Easy Install ignores this unless you pass it.
 )
 . (Join-Path $PSScriptRoot 'common.ps1')
 $ErrorActionPreference = 'Stop'
@@ -62,13 +63,13 @@ $target = [System.IO.Path]::GetFullPath($target.Trim().Trim('"'))
 if ($target.TrimEnd('\','/') -ne $Kit.TrimEnd('\','/')) {
   Write-Host "Copying the kit files to $target ..."
   New-Item -ItemType Directory -Force -Path $target | Out-Null
-  foreach ($item in @('scripts','www','mac','catalog','VERSION','SETUP.bat','EASY-INSTALL (Windows).bat','START-OFFLINE-AI.bat','STOP-OFFLINE-AI.bat','STATUS.bat','SETUP-MAC.command','EASY-INSTALL (Mac).command','START-OFFLINE-AI-MAC.command','STOP-OFFLINE-AI-MAC.command','STATUS-MAC.command','README.md','START-HERE.txt','ADVANCED.md','README-OUTAGE.txt','kit-settings.example.ini','kit-settings.ini','LICENSE')) {
+  foreach ($item in @('scripts','www','mac','linux','catalog','VERSION','SETUP.bat','EASY-INSTALL (Windows).bat','START-OFFLINE-AI.bat','STOP-OFFLINE-AI.bat','STATUS.bat','SETUP-MAC.command','EASY-INSTALL (Mac).command','START-OFFLINE-AI-MAC.command','STOP-OFFLINE-AI-MAC.command','STATUS-MAC.command','SETUP-LINUX.sh','EASY-INSTALL (Linux).sh','START-OFFLINE-AI-LINUX.sh','STOP-OFFLINE-AI-LINUX.sh','STATUS-LINUX.sh','README.md','START-HERE.txt','ADVANCED.md','README-OUTAGE.txt','kit-settings.example.ini','kit-settings.ini','LICENSE')) {
     $src = Join-Path $Kit $item
     if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination $target -Recurse -Force }
   }
   Write-Host 'Continuing setup in the new folder...'
   $argList = @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $target 'scripts\setup.ps1'))
-  foreach ($pair in @(@('-HardwareProfile',$HardwareProfile),@('-Tier',$Tier),@('-Models',$Models),@('-Zims',$Zims),@('-ExtraLibraries',$ExtraLibraries))) { if ($pair[1]) { $argList += @($pair[0], $pair[1]) } }
+  foreach ($pair in @(@('-HardwareProfile',$HardwareProfile),@('-Tier',$Tier),@('-Models',$Models),@('-Zims',$Zims),@('-ExtraLibraries',$ExtraLibraries),@('-Maps',$Maps))) { if ($pair[1]) { $argList += @($pair[0], $pair[1]) } }
   foreach ($sw in @(@('-Test',$Test),@('-Easy',$Easy),@('-SkipWikipedia',$SkipWikipedia),@('-WithWikipedia',$WithWikipedia),@('-UseSystemOllama',$UseSystemOllama),@('-NoStart',$NoStart),@('-Yes',$Yes),@('-ShareWifi',$ShareWifi))) { if ($sw[1]) { $argList += $sw[0] } }
   & (Get-Process -Id $PID).Path @argList
   exit $LASTEXITCODE
@@ -99,13 +100,16 @@ $wantWiki = -not $SkipWikipedia
 $extraCat = @(Get-ExtraCatalog)
 $extraSel = @()
 if ($ExtraLibraries) { $extraSel = @(Resolve-ExtraIds $ExtraLibraries $extraCat) }
+$mapCat = @(Get-MapCatalog)
+$mapSel = @()
+if ($Maps) { $mapSel = @(Resolve-MapIds $Maps $mapCat) }
 $shareChoice = ([bool]$ShareWifi -or [bool]$ShareOnWifi)   # Easy keeps the current setting (off on a new kit)
 
 function Step([int]$n, [string]$title) {
   Write-Host ''
   Write-Host ("--- Step {0} of {1}: {2} " -f $n, $WizardSteps, $title).PadRight(64, '-') -ForegroundColor Cyan
 }
-$WizardSteps = 6   # Phase 3 can add "Offline regional maps" as another step before the summary.
+$WizardSteps = 7   # maps are step 6; the summary is step 7. Easy Install never asks.
 
 if ($Easy) {
   $pick = Select-ProfileForDisk $hwProfile $hw.FreeGB
@@ -194,7 +198,22 @@ if ($Easy) {
   } else { Write-Host '  Chosen on the command line: ON' }
   if ($shareChoice) { Write-WifiWarning }
 
-  # (Phase 3: an "Offline regional maps" step goes here.)
+  # Step 6: optional offline maps. Easy Install never reaches this (maps stay off unless -Maps was passed).
+  Step 6 'Offline maps (optional)'
+  Write-Host '  Clean offline maps in the browser, stored in this kit (OpenStreetMap data packed by Kiwix).'
+  Write-Host '  Vancouver Island, British Columbia and Alberta are all inside the one Canada map'
+  Write-Host '  (about 10 GB). Kiwix does not publish those three places as their own files.'
+  Write-Host '  Picking more than one of those three downloads that Canada file once.'
+  Write-Host '  Broader regions are separate, larger files.'
+  Show-MapCatalog $mapCat
+  if (-not $Maps) {
+    $ans = Ask 'Type numbers or names (e.g. 1,4), "all", or press Enter for none' ''
+    $mapSel = @(Resolve-MapIds $ans $mapCat)
+  }
+  if ($mapSel.Count) {
+    $dl = @(Get-MapDownloadSet $mapSel)
+    Write-Host ('  Chosen: ' + (($mapSel | ForEach-Object { $_.Id }) -join ', ') + '  (' + $dl.Count + ' file(s), about ' + (Format-Size (Get-MapDownloadGB $mapSel)) + ')')
+  } else { Write-Host '  None (you can add them any time from STATUS.bat).' }
 }
 
 if ($TestMode) {
@@ -208,15 +227,17 @@ $estGB = $ProgramsGB
 if ($tierName -eq 'essentials') { $estGB += 3.8 } elseif ($tierName -eq 'test') { $estGB += 0.2 } else { $estGB += 11.2 }
 foreach ($m in $modelList) { $estGB += $m.GB }
 $extraGB = 0.0; foreach ($e in $extraSel) { if (-not (Get-ExtraInstalled $e)) { $extraGB += $e.GB } }
-$estGB += $extraGB
+$mapGB = Get-MapDownloadGB $mapSel
+$estGB += $extraGB + $mapGB
 $free = Get-FreeBytes $Kit
 
-# Summary (Step 6 in the wizard)
+# Summary (Step 7 in the wizard)
 if (-not $Easy) { Step $WizardSteps 'Summary' } else { Write-Host '' }
 Write-Host ("  AI models:        {0}" -f (($modelList | ForEach-Object { $_.Name }) -join ', '))
 Write-Host ("  Core library:     {0}" -f $tierName)
 Write-Host ("  Full Wikipedia:   {0}" -f $(if ($wantWiki) { 'Yes - about ' + (Format-GB ($WikipediaGB * 1e9)) + ', downloads in the background on first start' } else { 'No' }))
 Write-Host ("  Extra libraries:  {0}" -f $(if ($extraSel.Count) { (($extraSel | ForEach-Object { $_.Id }) -join ', ') + ' (' + (Format-Size $extraGB) + ')' } else { 'none' }))
+Write-Host ("  Offline maps:     {0}" -f $(if ($mapSel.Count) { (($mapSel | ForEach-Object { $_.Id }) -join ', ') + ' (' + (Format-Size $mapGB) + ', shared files counted once)' } else { 'none' }))
 Write-Host ("  Share on Wi-Fi:   {0}" -f $(if ($shareChoice) { 'ON (trusted home Wi-Fi only)' } else { 'off' }))
 $totalGB = $estGB; if ($wantWiki) { $totalGB += $WikipediaGB }
 Write-Host ("  Download now:     about {0:N1} GB   (with Wikipedia later: about {1:N1} GB in total)" -f $estGB, $totalGB)
@@ -232,11 +253,22 @@ if (-not $Easy) {
 if ($wantWiki) { Set-KitSetting 'SKIP_WIKIPEDIA' 'no' } else { Set-KitSetting 'SKIP_WIKIPEDIA' 'yes' }
 Set-ShareOnWifi $shareChoice
 if ($extraSel.Count) { Set-KitSetting 'EXTRA_LIBRARIES' (($extraSel | ForEach-Object { $_.Id }) -join ',') }
+if (-not $Easy -or $Maps) { Set-KitSetting 'MAPS' (($mapSel | ForEach-Object { $_.Id }) -join ',') }
 
 @{ profile=$hwProfile; tier=$tierName; models=(($modelList | ForEach-Object { $_.Name }) -join ','); wikipedia=$wantWiki; created=(Get-Date -Format 'yyyy-MM-dd') } | ConvertTo-Json | Set-Content -LiteralPath $ConfigFile -Encoding UTF8
 
 # ---------- 3. Kiwix (library server) ----------
 Write-Host ''
+Start-StayAwake
+$needBig = $false
+if ($wantWiki -and -not $TestMode) { $needBig = $true }
+foreach ($e in @($extraSel + $mapSel)) { if ($e.GB -ge 4) { $needBig = $true } }
+if ($needBig -and (Test-Fat32Volume $Kit)) {
+  Write-Host 'This drive is FAT32, which cannot store a file larger than 4 GB.' -ForegroundColor Red
+  Write-Host 'Wikipedia, the larger libraries, and offline maps need exFAT, NTFS, or APFS.' -ForegroundColor Red
+  Write-Host 'Copy this folder onto an exFAT, NTFS, or APFS drive, then run setup again.' -ForegroundColor Red
+  exit 1
+}
 Write-Host '[1/4] Library program (kiwix-tools)...'
 if (Get-KiwixServeExe) { Write-Host '  Already installed.' -ForegroundColor Green }
 else {
@@ -253,6 +285,7 @@ else {
   $md5 = (Invoke-CurlText ($relUrl + $k.File + '.md5')).Split(' ')[0].Trim().ToLower()
   if ((Get-FileHash -LiteralPath $zip -Algorithm MD5).Hash.ToLower() -ne $md5) { Remove-Item -LiteralPath $zip -Force; throw 'kiwix-tools download was damaged (checksum mismatch). Run setup again.' }
   Expand-Archive -LiteralPath $zip -DestinationPath $KiwixDir -Force
+  Repair-ExtractedLinks $KiwixDir
   Remove-Item -LiteralPath $zip -Force
   Write-Host '  Installed.' -ForegroundColor Green
 }
@@ -273,6 +306,7 @@ else {
   if ((Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLower() -ne $expected) { Remove-Item -LiteralPath $zip -Force; throw 'Ollama download was damaged (checksum mismatch). Run setup again.' }
   Write-Host '  Unpacking...'
   Expand-Archive -LiteralPath $zip -DestinationPath $OllamaDir -Force
+  Repair-ExtractedLinks $OllamaDir
   Remove-Item -LiteralPath $zip -Force
   Write-Host '  Installed.' -ForegroundColor Green
 }
@@ -294,6 +328,13 @@ if ($extraSel.Count) {
     try { if (-not (Install-ExtraLibrary $e)) { $failed += $e.Id } } catch { Write-Host "    Problem: $($_.Exception.Message)" -ForegroundColor Yellow; $failed += $e.Id }
   }
 }
+if ($mapSel.Count) {
+  Write-Host 'Offline maps...'
+  foreach ($e in @(Get-MapDownloadSet $mapSel)) {
+    try { if (-not (Install-Map $e)) { $failed += $e.Id } } catch { Write-Host "    Problem: $($_.Exception.Message)" -ForegroundColor Yellow; $failed += $e.Id }
+  }
+}
+Write-MapsIndex
 
 # ---------- 6. Models ----------
 Write-Host '[4/4] AI models...'

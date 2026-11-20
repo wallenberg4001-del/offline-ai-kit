@@ -6,8 +6,14 @@
 ensure_dirs
 printf '%s\n' "$$" > "$(pid_file wiki-download)"
 trap 'rm -f "$(pid_file wiki-download)"' EXIT
-# Keep the Mac from idle-sleeping while this runs (stops automatically when we exit).
-command -v caffeinate >/dev/null 2>&1 && { caffeinate -i -w "$$" >/dev/null 2>&1 & }
+# Keep the computer from idle-sleeping while this runs (stops automatically when we exit).
+stay_awake
+if [ "$TEST_MODE" != yes ] && fat32_blocked "$LIBRARY"; then
+  write_wiki_status error 0 0 0 0 "Paused: this drive is FAT32. Wikipedia needs exFAT, NTFS, or APFS."
+  err "This drive is FAT32, which cannot store a file larger than 4 GB."
+  err "Full Wikipedia needs exFAT, NTFS, or APFS."
+  exit 1
+fi
 
 say "$(date '+%Y-%m-%d %H:%M:%S') Full Wikipedia download starting"
 if f="$(wikipedia_verified)"; then

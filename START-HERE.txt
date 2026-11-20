@@ -16,6 +16,9 @@ still work when the internet or power is out.
    Older Mac with an Intel chip ..  EASY-INSTALL (Mac)
                                     (the same file - it can
                                      tell which Mac you have)
+   Linux .........................  EASY-INSTALL (Linux).sh
+                                    In a terminal:
+                                    bash "EASY-INSTALL (Linux).sh"
 
  Not sure which Mac you have?
    Click the Apple menu (top-left corner), then
@@ -32,12 +35,14 @@ still work when the internet or power is out.
                      for your computer. Best for most people.
 
    SETUP ..........  a step-by-step "Setup Wizard" where you
-   (SETUP.bat or     choose your features first: AI size,
-    SETUP-MAC)       full Wikipedia yes/no, extra libraries,
-                     and sharing with phones on home Wi-Fi.
+   (SETUP.bat,       choose your features first: AI size,
+    SETUP-MAC, or    full Wikipedia yes/no, extra libraries,
+    SETUP-LINUX.sh)  sharing with phones on home Wi-Fi,
+                     and optional offline maps.
                      Press Enter to take each suggestion.
                      Nothing downloads until you say yes at
-                     the end.
+                     the end. Easy Install does not ask
+                     about maps and does not download them.
 
  On an Intel Mac the assistant is slower. An answer can take
  half a minute or more. That is normal. The library is fast.
@@ -135,9 +140,46 @@ still work when the internet or power is out.
       repair, outdoors), emergency preparedness guides.
       Type the numbers you want. Needs internet to download.
 
-   3) Check for updates - only when you ask, needs internet.
+   3) Add offline maps - Vancouver Island, British Columbia
+      and Alberta are inside the one Canada map (about 10 GB).
+      Broader regions are separate files. Easy Install does
+      not download maps. Phones on home Wi-Fi open them from
+      the chat address. Needs internet to download.
+
+   4) Check for updates - only when you ask, needs internet.
       It never downloads or changes anything by itself.
       The chat page has a "Check for updates" button too.
+
+
+---------------- RUNNING FROM A USB DRIVE -------------------
+
+ Put the whole kit folder on one USB drive to use it on
+ Windows, Mac and Linux. Format the drive as exFAT, NTFS
+ or APFS. FAT32 cannot hold a file over 4 GB, and the kit
+ will refuse the big downloads on a FAT32 drive.
+
+ Plug it in and run START from that drive. On Windows, if
+ the drive letter changes, run START from the USB again.
+ START rewrites the Desktop shortcut.
+
+ On a Mac or Linux, if the drive will not run programs
+ (common on exFAT), start with bash and the file name, for
+ example:
+
+   bash "/Volumes/YOURDRIVE/offline-ai-kit/START-OFFLINE-AI-MAC.command"
+   bash "/media/you/YOURDRIVE/offline-ai-kit/START-OFFLINE-AI-LINUX.sh"
+
+ The kit then copies Kiwix and Ollama to a cache on the
+ computer and runs them from there. The library stays on
+ the USB.
+
+ On a Mac, kiwix-serve cannot open a library file bigger
+ than 4 GB when that file sits on exFAT. Windows and Linux
+ can. Keep big files on APFS or the internal disk if you
+ use a Mac. Smaller files on the USB still open.
+
+ The computer is kept awake during long downloads. Leave
+ it plugged in.
 
 
 -------------------- IF SOMETHING GOES WRONG ----------------

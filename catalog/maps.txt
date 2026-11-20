@@ -1,0 +1,14 @@
+# Offline AI Kit - optional regional offline maps (add them in the Setup Wizard or from STATUS).
+# One region per line:  id | kiwix folder | file prefix | approx size in GB | group | description
+# The newest dated file (prefix_YYYY-MM.zim, or prefix_YYYY-MMa.zim) is picked at download time
+# and checked with its SHA-256 from download.kiwix.org. Sizes were checked on 2026-11-19.
+# Vancouver Island, British Columbia and Alberta are published inside the ONE Canada map
+# (maps_en_canada, about 10 GB). Choosing more than one of those three downloads that file once.
+# Kiwix does not publish those three places as their own files.
+vancouver-island|zim/maps|maps_en_canada|10|Easy|Vancouver Island, inside the Canada offline map (about 10 GB; Kiwix does not publish the Island alone)
+british-columbia|zim/maps|maps_en_canada|10|Easy|British Columbia, inside the same Canada offline map (about 10 GB)
+alberta|zim/maps|maps_en_canada|10|Easy|Alberta, inside the same Canada offline map (about 10 GB)
+united-states|zim/maps|maps_en_united-states-of-america|15|Broad|United States offline map
+north-america|zim/maps|maps_en_north-america|21|Broad|North America offline map (a separate file from the Canada and United States maps)
+europe|zim/maps|maps_en_europe|25|Broad|Europe offline map
+world|zim/maps|maps_en_all|72|Broad|Whole-world offline map

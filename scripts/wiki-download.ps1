@@ -24,6 +24,13 @@ try {
   Write-Host '  Full English Wikipedia - background download'
   Write-Host '  Everything else in the kit already works while this runs.'
   Write-Host '=================================================='
+  if (-not $TestMode -and (Test-Fat32Volume $Library)) {
+    Write-Host 'This drive is FAT32, which cannot store a file larger than 4 GB.' -ForegroundColor Red
+    Write-Host 'Full Wikipedia needs exFAT, NTFS, or APFS.' -ForegroundColor Red
+    Write-ProgressFile -ProgressFile $progress -State 'error' -Message 'Paused: this drive is FAT32. Wikipedia needs exFAT, NTFS, or APFS.'
+    Finish 1
+  }
+  Start-StayAwake
   $entry = $ZimCatalog | Where-Object { $_.Prefix -eq $WikipediaPrefix } | Select-Object -First 1
 
   # Already have a verified copy (any date)? Then nothing to do.
