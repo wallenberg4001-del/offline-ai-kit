@@ -145,7 +145,7 @@ the chat page is served from `http://127.0.0.1:8091`, which Ollama allows by def
 | `ollama-models/`, `home/` | the kit's AI models and Ollama settings (shared) |
 | `logs/` | logs, pid files, `wikipedia-progress.json` |
 | `www/` | chat page (`chat.html`, `ask-library.js`, `selftest.html`); START writes `kit-config.js` (ports) and on Mac `wiki-status.js` |
-| `tests/` | offline checks for `ask-library.js` (`node tests/ask-library.test.js`; not needed to run the kit) |
+| `tests/` | offline checks for `ask-library.js` (`node tests/ask-library.test.js`). Only in the GitHub repo, not in the download ZIP; not needed to run the kit |
 | `kit-config.json` / `kit-config-mac.txt` | what setup chose last time |
 
 Uninstall: run STOP, then delete the kit folder (and the Desktop shortcut). Nothing else is installed.
