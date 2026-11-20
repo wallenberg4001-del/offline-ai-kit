@@ -28,19 +28,41 @@ function parseCatalog(text) {
 const maps = parseCatalog(read("catalog/maps.txt"));
 const byId = {};
 maps.forEach(function (e) { byId[e.id] = e; });
-check("maps catalog parses", maps.length >= 7, maps.length);
-["vancouver-island", "british-columbia", "alberta"].forEach(function (id) {
-  check(id + " is an easy Canada alias", byId[id] && byId[id].prefix === "maps_en_canada" && byId[id].group === "Easy" && /10/.test(String(byId[id].gb)) && /Canada/i.test(byId[id].about), byId[id]);
+check("maps catalog parses", maps.length === 23, maps.length);
+["vancouver-island", "british-columbia", "alberta", "saskatchewan", "canada"].forEach(function (id) {
+  check(id + " is an easy Canada alias", byId[id] && byId[id].prefix === "maps_en_canada" && byId[id].group === "Easy" && byId[id].gb === 10 && /Canada/i.test(byId[id].about), byId[id]);
 });
-check("broader regions are real separate prefixes",
-  byId["united-states"].prefix === "maps_en_united-states-of-america" &&
-  byId["north-america"].prefix === "maps_en_north-america" &&
-  byId.europe.prefix === "maps_en_europe" &&
-  byId.world.prefix === "maps_en_all");
-const three = M.dedupeByPrefix([byId["vancouver-island"], byId["british-columbia"], byId.alberta]);
-check("three Canadian choices are one download", three.length === 1 && three[0].prefix === "maps_en_canada");
+const broad = {
+  "united-states": ["maps_en_united-states-of-america", 15],
+  "north-america": ["maps_en_north-america", 21],
+  "central-america": ["maps_en_central-america", 1.6],
+  "south-america": ["maps_en_south-america", 5.1],
+  "united-kingdom": ["maps_en_united-kingdom", 1.8],
+  europe: ["maps_en_europe", 25],
+  nordics: ["maps_en_nordics", 5.3],
+  france: ["maps_en_france", 5.4],
+  germany: ["maps_en_germany", 3.7],
+  italy: ["maps_en_italy", 2.5],
+  switzerland: ["maps_en_switzerland", 0.7],
+  australia: ["maps_en_australia", 1.8],
+  "new-zealand": ["maps_en_new-zealand", 3.7],
+  "australia-oceania": ["maps_en_australia-oceania", 8],
+  asia: ["maps_en_asia", 20],
+  "southeast-asia": ["maps_en_southeast-asia", 2],
+  africa: ["maps_en_africa", 7.6],
+  world: ["maps_en_all", 72]
+};
+Object.keys(broad).forEach(function (id) {
+  const e = byId[id];
+  const want = broad[id];
+  check(id + " is a separate broad map", !!(e && e.dir === "zim/maps" && e.prefix === want[0] && e.gb === want[1] && e.group === "Broad"), e);
+});
+const provinces = M.dedupeByPrefix(["vancouver-island", "british-columbia", "alberta", "saskatchewan"].map(function (id) { return byId[id]; }));
+check("four Canadian provinces are one download", provinces.length === 1 && provinces[0].prefix === "maps_en_canada");
+const withCanada = M.dedupeByPrefix(["vancouver-island", "british-columbia", "alberta", "saskatchewan", "canada"].map(function (id) { return byId[id]; }));
+check("saskatchewan and canada dedupe to one maps_en_canada file", withCanada.length === 1 && withCanada[0].prefix === "maps_en_canada");
 const allFiles = M.dedupeByPrefix(maps);
-check("all regions dedupe to five files", allFiles.length === 5, allFiles.map(function (e) { return e.prefix; }));
+check("all regions dedupe to nineteen files", allFiles.length === 19, allFiles.map(function (e) { return e.prefix; }));
 
 const listing = [
   '<a href="maps_en_nordics_2026-08.zim">a</a>',
@@ -104,7 +126,7 @@ check("resolver accepts a letter suffix in bash", /\[0-9\]\{4\}-\[0-9\]\{2\}\[a-
 check("FAT32 names are refused in both libraries", /fat32/.test(read("scripts/common.ps1")) && /vfat/.test(read("scripts/common.ps1")) && /msdos/.test(read("scripts/common.ps1")) && /fat32\|vfat\|msdos/.test(read("mac/lib.sh")));
 check("exFAT mmap limit is explained for macOS", /mmap/.test(read("mac/lib.sh")) && /4 GB/.test(read("README.md")) && /exFAT/.test(read("START-HERE.txt")));
 check("USB section is in the README and START-HERE", /Running from a USB drive/.test(read("README.md")) && /RUNNING FROM A USB DRIVE/.test(read("START-HERE.txt")));
-check("version is 1.2.0", read("VERSION").trim() === "1.2.0" && /"1\.2\.0"/.test(read("www/version.js")));
+check("version is 1.2.1", read("VERSION").trim() === "1.2.1" && /"1\.2\.1"/.test(read("www/version.js")));
 
 const vm = require("vm");
 const html = read("www/maps.html");
@@ -120,30 +142,36 @@ check("maps.html inline script parses", n === 1 && !bad, bad);
 // Real Resolve-LatestZim, against a fixture. Does not download.
 const fixture = path.join(os.tmpdir(), "oaik-zim-listing.html");
 fs.writeFileSync(fixture, listing);
-const ps1 = path.join(os.tmpdir(), "oaik-phase3-resolve.ps1");
-const kit = root.replace(/'/g, "''");
-const fix = fixture.replace(/'/g, "''");
-fs.writeFileSync(ps1, [
-  "$ErrorActionPreference = 'Stop'",
-  ". '" + kit + "\\scripts\\common.ps1'",
-  "$env:OFFLINE_AI_ZIM_LISTING = '" + fix + "'",
-  "$z = Resolve-LatestZim ([pscustomobject]@{ Id='n'; Dir='zim/maps'; Prefix='maps_en_nordics'; About='n' })",
-  "Write-Output $z.File",
-  "$c = Resolve-LatestZim ([pscustomobject]@{ Id='c'; Dir='zim/maps'; Prefix='maps_en_canada'; About='c' })",
-  "Write-Output $c.File",
-  "$rows = @(Get-MapCatalog)",
-  "Write-Output ('COUNT ' + $rows.Count)",
-  "$pick = @(Get-MapDownloadSet @(Resolve-MapIds 'vancouver-island,british-columbia,alberta' $rows))",
-  "Write-Output ('FILES ' + $pick.Count + ' ' + $pick[0].Prefix)"
-].join("\r\n"));
-try {
-  const out = execFileSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps1], { encoding: "utf8", timeout: 60000 });
-  const lines = out.split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
-  check("PowerShell resolver picks 2026-09 and canada 2026-06", lines.indexOf("maps_en_nordics_2026-09.zim") >= 0 && lines.indexOf("maps_en_canada_2026-06.zim") >= 0, lines);
-  check("PowerShell dedupes the Canada aliases", lines.some(function (l) { return l === "FILES 1 maps_en_canada"; }), lines);
-} catch (e) {
-  check("PowerShell resolver picks 2026-09 and canada 2026-06", false, (e.stdout || "") + (e.stderr || e.message));
-  check("PowerShell dedupes the Canada aliases", false, "skipped");
+if (process.platform !== "win32") {
+  check("PowerShell resolver checks skipped (not Windows)", true);
+} else {
+  const ps1 = path.join(os.tmpdir(), "oaik-phase3-resolve.ps1");
+  const kit = root.replace(/'/g, "''");
+  const fix = fixture.replace(/'/g, "''");
+  fs.writeFileSync(ps1, [
+    "$ErrorActionPreference = 'Stop'",
+    ". '" + kit + "\\scripts\\common.ps1'",
+    "$env:OFFLINE_AI_ZIM_LISTING = '" + fix + "'",
+    "$z = Resolve-LatestZim ([pscustomobject]@{ Id='n'; Dir='zim/maps'; Prefix='maps_en_nordics'; About='n' })",
+    "Write-Output $z.File",
+    "$c = Resolve-LatestZim ([pscustomobject]@{ Id='c'; Dir='zim/maps'; Prefix='maps_en_canada'; About='c' })",
+    "Write-Output $c.File",
+    "$rows = @(Get-MapCatalog)",
+    "Write-Output ('COUNT ' + $rows.Count)",
+    "$pick = @(Get-MapDownloadSet @(Resolve-MapIds 'vancouver-island,british-columbia,alberta,saskatchewan,canada' $rows))",
+    "Write-Output ('FILES ' + $pick.Count + ' ' + $pick[0].Prefix)"
+  ].join("\r\n"));
+  try {
+    const out = execFileSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps1], { encoding: "utf8", timeout: 60000 });
+    const lines = out.split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
+    check("PowerShell resolver picks 2026-09 and canada 2026-06", lines.indexOf("maps_en_nordics_2026-09.zim") >= 0 && lines.indexOf("maps_en_canada_2026-06.zim") >= 0, lines);
+    check("PowerShell dedupes the Canada aliases", lines.some(function (l) { return l === "FILES 1 maps_en_canada"; }), lines);
+    check("PowerShell catalog lists 23 maps", lines.some(function (l) { return l === "COUNT 23"; }), lines);
+  } catch (e) {
+    check("PowerShell resolver picks 2026-09 and canada 2026-06", false, (e.stdout || "") + (e.stderr || e.message));
+    check("PowerShell dedupes the Canada aliases", false, "skipped");
+    check("PowerShell catalog lists 23 maps", false, "skipped");
+  }
 }
 
 function bashExe() {

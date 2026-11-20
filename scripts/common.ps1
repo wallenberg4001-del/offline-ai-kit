@@ -780,7 +780,7 @@ function Resolve-MapIds([string]$Text, $Catalog) {
 }
 
 function Get-MapDownloadSet($Entries) {
-  # One download per file prefix. Vancouver Island, British Columbia and Alberta share maps_en_canada.
+  # One download per file prefix. Vancouver Island, British Columbia, Alberta, Saskatchewan and Canada share maps_en_canada.
   $seen = @{}; $out = @()
   foreach ($e in $Entries) {
     if ($seen.ContainsKey($e.Prefix)) { continue }
@@ -803,7 +803,7 @@ function Show-MapCatalog($Catalog) {
     $mark = '   '; if (Get-PrefixInstalled $e.Prefix) { $mark = '[x]' }
     Write-Host ('  {0,2}) {1} {2,-20} {3,9}  {4}' -f $i, $mark, $e.Id, (Format-Size $e.GB), $e.About)
   }
-  Write-Host '  [x] = already added. Vancouver Island, British Columbia and Alberta share one Canada file (counted once).'
+  Write-Host '  [x] = already added. Vancouver Island, British Columbia, Alberta, Saskatchewan and Canada share one Canada file (counted once).'
   Write-Host '  "all" downloads every different map file in this list.'
 }
 

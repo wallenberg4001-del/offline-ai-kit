@@ -223,8 +223,9 @@ Ids: `se-sustainability`, `wiktionary-simple`, `se-lifehacks`, `se-medical`, `se
 Kiwix mirror, resume and SHA-256 flow (`zim/maps` on download.kiwix.org). The newest file may be
 `prefix_YYYY-MM.zim` or `prefix_YYYY-MMa.zim`.
 
-Vancouver Island, British Columbia and Alberta are three names for `maps_en_canada` (about 10 GB). The wizard says
-so. Choosing more than one downloads that file once. `all` downloads every different prefix in the file.
+Vancouver Island, British Columbia, Alberta, Saskatchewan and Canada are names for `maps_en_canada` (about 10 GB).
+Kiwix publishes Canada as one file, so picking any combination downloads it once. The wizard says so.
+`all` downloads every different prefix in the file.
 
 ```bash
 bash mac/add-maps.sh --list

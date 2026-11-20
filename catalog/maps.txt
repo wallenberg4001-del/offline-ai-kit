@@ -2,13 +2,29 @@
 # One region per line:  id | kiwix folder | file prefix | approx size in GB | group | description
 # The newest dated file (prefix_YYYY-MM.zim, or prefix_YYYY-MMa.zim) is picked at download time
 # and checked with its SHA-256 from download.kiwix.org. Sizes were checked on 2026-11-19.
-# Vancouver Island, British Columbia and Alberta are published inside the ONE Canada map
-# (maps_en_canada, about 10 GB). Choosing more than one of those three downloads that file once.
-# Kiwix does not publish those three places as their own files.
-vancouver-island|zim/maps|maps_en_canada|10|Easy|Vancouver Island, inside the Canada offline map (about 10 GB; Kiwix does not publish the Island alone)
+# Vancouver Island, British Columbia, Alberta, Saskatchewan and Canada are published inside
+# the ONE Canada map (maps_en_canada, about 10 GB). Kiwix publishes Canada as one file, so
+# picking any combination downloads it once. Kiwix does not publish those places alone.
+vancouver-island|zim/maps|maps_en_canada|10|Easy|Vancouver Island, inside the Canada offline map (about 10 GB; Kiwix publishes Canada as one file, so any combination downloads it once)
 british-columbia|zim/maps|maps_en_canada|10|Easy|British Columbia, inside the same Canada offline map (about 10 GB)
 alberta|zim/maps|maps_en_canada|10|Easy|Alberta, inside the same Canada offline map (about 10 GB)
+saskatchewan|zim/maps|maps_en_canada|10|Easy|Saskatchewan, inside the same Canada offline map (about 10 GB)
+canada|zim/maps|maps_en_canada|10|Easy|Canada offline map (about 10 GB; the same file as the regions above, downloaded once)
 united-states|zim/maps|maps_en_united-states-of-america|15|Broad|United States offline map
-north-america|zim/maps|maps_en_north-america|21|Broad|North America offline map (a separate file from the Canada and United States maps)
+north-america|zim/maps|maps_en_north-america|21|Broad|North America offline map (separate file from Canada and United States)
+central-america|zim/maps|maps_en_central-america|1.6|Broad|Central America offline map
+south-america|zim/maps|maps_en_south-america|5.1|Broad|South America offline map
+united-kingdom|zim/maps|maps_en_united-kingdom|1.8|Broad|United Kingdom offline map
 europe|zim/maps|maps_en_europe|25|Broad|Europe offline map
+nordics|zim/maps|maps_en_nordics|5.3|Broad|Nordic countries offline map
+france|zim/maps|maps_en_france|5.4|Broad|France offline map
+germany|zim/maps|maps_en_germany|3.7|Broad|Germany offline map
+italy|zim/maps|maps_en_italy|2.5|Broad|Italy offline map
+switzerland|zim/maps|maps_en_switzerland|0.7|Broad|Switzerland offline map
+australia|zim/maps|maps_en_australia|1.8|Broad|Australia offline map
+new-zealand|zim/maps|maps_en_new-zealand|3.7|Broad|New Zealand offline map
+australia-oceania|zim/maps|maps_en_australia-oceania|8.0|Broad|Australia and Oceania offline map
+asia|zim/maps|maps_en_asia|20|Broad|Asia offline map
+southeast-asia|zim/maps|maps_en_southeast-asia|2.0|Broad|Southeast Asia offline map
+africa|zim/maps|maps_en_africa|7.6|Broad|Africa offline map
 world|zim/maps|maps_en_all|72|Broad|Whole-world offline map

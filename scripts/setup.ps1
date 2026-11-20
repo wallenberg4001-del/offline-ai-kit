@@ -37,19 +37,52 @@ function Ask([string]$Question, [string]$Default) {
   return $a.Trim()
 }
 
+function Start-SetupLog {
+  $LogFile = Join-Path $LogDir ('setup-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
+  try { Start-Transcript -LiteralPath $LogFile -Append | Out-Null; $global:KitTranscript = $true; Write-Host "(A copy of everything shown here is saved in $LogFile)" } catch {}
+}
+
+function Unblock-KitFiles {
+  try { Get-ChildItem -LiteralPath $Kit -Recurse -Include *.ps1,*.bat,*.html -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue } catch {}
+}
+
 Write-Host '=================================================='
 if ($Easy) { Write-Host '  Offline AI Kit - EASY INSTALL (no questions)' } else { Write-Host '  Offline AI Kit - setup' }
 Write-Host '  Downloads everything once, so it all works later with NO internet.'
 Write-Host '=================================================='
 Write-Host ''
 if (-not $script:IsWin) { Write-Host 'Note: this kit is built for Windows. Continuing anyway.' -ForegroundColor Yellow }
+
+# -DetectOnly is read-only: hardware check and chosen profile, then stop.
+# No folder prompt, no directories, no log, and no kit-settings.ini.
+if ($DetectOnly) {
+  $hw = Get-Hardware
+  $gpuText = 'no NVIDIA graphics card found'
+  if ($hw.Gpu) { $gpuText = $hw.Gpu; if ($hw.VramGB -gt 0) { $gpuText += " ($($hw.VramGB) GB)" } }
+  Write-Host ("This computer: {0} GB memory, {1}, {2} GB free on this drive." -f $hw.RamGB, $gpuText, $hw.FreeGB)
+  $hwProfile = Get-HardwareProfile $hw
+  if ($HardwareProfile) { $hwProfile = $HardwareProfile.ToLower() }
+  if (-not $Profiles.Contains($hwProfile)) { $hwProfile = 'standard' }
+  Write-Host ("Best fit for this computer: {0}" -f $Profiles[$hwProfile].Label)
+  $pk = Select-ProfileForDisk $hwProfile $hw.FreeGB
+  if ($pk) { Write-Host ("PROFILE: {0}  (Easy install would use: {1}, Wikipedia: {2})" -f $hwProfile, $pk.Profile, $pk.Wikipedia) } else { Write-Host "PROFILE: $hwProfile  (Easy install: not enough disk space)" }
+  exit 0
+}
+
 $null = Get-CurlExe
 
 # Settings file values act as defaults for anything not given on the command line.
 if (-not $Tier)   { $Tier   = Get-Setting 'LIBRARY_TIER' '' }
 if (-not $Models) { $Models = Get-Setting 'MODELS' '' }
 if (-not $Zims)   { $Zims   = Get-Setting 'ZIMS' '' }
-if ($UseSystemOllama) { Set-KitSetting 'USE_SYSTEM_OLLAMA' 'yes'; $script:UseSystemOllama = $true; if (-not $KitSettings.ContainsKey('OLLAMA_PORT')) { $script:OllamaPort = 11434 } }
+# Remember this choice in memory now. kit-settings.ini is written only after Proceed
+# (Easy Install does not ask, and writes the file when the download starts).
+$persistSystemOllama = $false
+if ($UseSystemOllama) {
+  $persistSystemOllama = $true
+  $script:UseSystemOllama = $true
+  if (-not $KitSettings.ContainsKey('OLLAMA_PORT')) { $script:OllamaPort = 11434 }
+}
 
 # ---------- 1. Install folder ----------
 $target = $Kit
@@ -74,12 +107,15 @@ if ($target.TrimEnd('\','/') -ne $Kit.TrimEnd('\','/')) {
   & (Get-Process -Id $PID).Path @argList
   exit $LASTEXITCODE
 }
-Ensure-Dirs
-$LogFile = Join-Path $LogDir ('setup-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
-try { Start-Transcript -LiteralPath $LogFile -Append | Out-Null; $global:KitTranscript = $true; Write-Host "(A copy of everything shown here is saved in $LogFile)" } catch {}
-if ($Test -or $env:OFFLINE_AI_TEST -match '^(?i)(1|yes|true)$') { Set-KitSetting 'TEST_MODE' 'yes'; Enable-TestMode }
+# Directories, the setup log and kit-settings.ini wait until the user says Proceed.
+# Easy Install does not ask, so it prepares the folder now.
+$persistTest = $false
+if ($Test -or $env:OFFLINE_AI_TEST -match '^(?i)(1|yes|true)$') {
+  $persistTest = $true
+  if (-not $script:TestMode) { Enable-TestMode }
+}
+if ($Easy) { Ensure-Dirs; Unblock-KitFiles; Start-SetupLog }
 if ($TestMode) { Write-Host 'TEST MODE: tiny library, one small model, 13 MB Wikipedia stand-in. Delete kit-settings.ini (or set TEST_MODE=no) to leave test mode.' -ForegroundColor Yellow }
-try { Get-ChildItem -LiteralPath $Kit -Recurse -Include *.ps1,*.bat,*.html -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue } catch {}
 
 # ---------- 2. Hardware check ----------
 $hw = Get-Hardware
@@ -90,12 +126,6 @@ $hwProfile = Get-HardwareProfile $hw
 if ($HardwareProfile) { $hwProfile = $HardwareProfile.ToLower() }
 if (-not $Profiles.Contains($hwProfile)) { $hwProfile = 'standard' }
 Write-Host ("Best fit for this computer: {0}" -f $Profiles[$hwProfile].Label)
-if ($DetectOnly) {
-  $pk = Select-ProfileForDisk $hwProfile $hw.FreeGB
-  if ($pk) { Write-Host ("PROFILE: {0}  (Easy install would use: {1}, Wikipedia: {2})" -f $hwProfile, $pk.Profile, $pk.Wikipedia) } else { Write-Host "PROFILE: $hwProfile  (Easy install: not enough disk space)" }
-  try { Stop-Transcript | Out-Null } catch {}
-  exit 0
-}
 $wantWiki = -not $SkipWikipedia
 $extraCat = @(Get-ExtraCatalog)
 $extraSel = @()
@@ -201,10 +231,10 @@ if ($Easy) {
   # Step 6: optional offline maps. Easy Install never reaches this (maps stay off unless -Maps was passed).
   Step 6 'Offline maps (optional)'
   Write-Host '  Clean offline maps in the browser, stored in this kit (OpenStreetMap data packed by Kiwix).'
-  Write-Host '  Vancouver Island, British Columbia and Alberta are all inside the one Canada map'
-  Write-Host '  (about 10 GB). Kiwix does not publish those three places as their own files.'
-  Write-Host '  Picking more than one of those three downloads that Canada file once.'
-  Write-Host '  Broader regions are separate, larger files.'
+  Write-Host '  Vancouver Island, British Columbia, Alberta and Saskatchewan are inside the one Canada map'
+  Write-Host '  (about 10 GB). Kiwix publishes Canada as one file, so picking any of those, or Canada,'
+  Write-Host '  downloads that file once.'
+  Write-Host '  Other regions are separate, larger files.'
   Show-MapCatalog $mapCat
   if (-not $Maps) {
     $ans = Ask 'Type numbers or names (e.g. 1,4), "all", or press Enter for none' ''
@@ -246,10 +276,15 @@ if ($free -lt ($estGB * 1e9)) { Write-Host 'Not enough free space for these choi
 if ($wantWiki -and -not $TestMode -and $free -lt (($estGB + 140) * 1e9)) { Write-Host 'WARNING: there will not be enough room for full Wikipedia (~127 GB) on this drive.' -ForegroundColor Yellow }
 if (-not $Easy) {
   $go = Ask 'Proceed? (Y/N)' 'Y'
-  if ($go -notmatch '^[Yy]') { Write-Host 'OK - nothing was downloaded or changed. Run SETUP.bat again any time.'; Write-Host 'RESULT: SETUP CANCELLED'; try { Stop-Transcript | Out-Null } catch {}; exit 0 }
+  if ($go -notmatch '^[Yy]') { Write-Host 'OK - nothing was downloaded or changed. Run SETUP.bat again any time.'; Write-Host 'RESULT: SETUP CANCELLED'; exit 0 }
+  Ensure-Dirs
+  Unblock-KitFiles
+  Start-SetupLog
 }
 
 # Save the choices so START / STOP / STATUS follow them.
+if ($persistTest) { Set-KitSetting 'TEST_MODE' 'yes' }
+if ($persistSystemOllama) { Set-KitSetting 'USE_SYSTEM_OLLAMA' 'yes' }
 if ($wantWiki) { Set-KitSetting 'SKIP_WIKIPEDIA' 'no' } else { Set-KitSetting 'SKIP_WIKIPEDIA' 'yes' }
 Set-ShareOnWifi $shareChoice
 if ($extraSel.Count) { Set-KitSetting 'EXTRA_LIBRARIES' (($extraSel | ForEach-Object { $_.Id }) -join ',') }

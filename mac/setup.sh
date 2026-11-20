@@ -253,10 +253,10 @@ else
   # Step 6: optional offline maps. Easy Install never reaches this (maps stay off unless --maps was passed).
   step 6 "Offline maps (optional)"
   say "  Clean offline maps in the browser, stored in this kit (OpenStreetMap data packed by Kiwix)."
-  say "  Vancouver Island, British Columbia and Alberta are all inside the one Canada map"
-  say "  (about 10 GB). Kiwix does not publish those three places as their own files."
-  say "  Picking more than one of those three downloads that Canada file once."
-  say "  Broader regions are separate, larger files."
+  say "  Vancouver Island, British Columbia, Alberta and Saskatchewan are inside the one Canada map"
+  say "  (about 10 GB). Kiwix publishes Canada as one file, so picking any of those, or Canada,"
+  say "  downloads that file once."
+  say "  Other regions are separate, larger files."
   show_map_catalog
   if [ -z "$MAPS" ]; then
     ans="$(ask 'Type numbers or names (e.g. 1,4), "all", or press Return for none:' '')"

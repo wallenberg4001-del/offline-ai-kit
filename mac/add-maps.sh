@@ -5,7 +5,7 @@
 #   bash mac/add-maps.sh --list
 #   bash mac/add-maps.sh --add alberta,europe     (numbers from --list work too; "all" = every map file)
 #   bash mac/add-maps.sh --remove alberta
-# Vancouver Island, British Columbia and Alberta are the same Canada file and download once.
+# Vancouver Island, British Columbia, Alberta, Saskatchewan and Canada are the same Canada file and download once.
 # shellcheck source=lib.sh
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 ensure_dirs
@@ -62,7 +62,7 @@ case "$ACTION" in
   menu)
     say "=================================================="
     say "  Add offline maps (needs internet while downloading)"
-    say "  Vancouver Island, British Columbia and Alberta are one Canada file (about 10 GB)."
+    say "  Vancouver Island, British Columbia, Alberta, Saskatchewan and Canada are one file (about 10 GB)."
     say "=================================================="
     show_map_catalog
     say "  Free space on this drive: $(gb "$(free_bytes "$LIBRARY")")"

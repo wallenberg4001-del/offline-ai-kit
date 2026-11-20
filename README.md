@@ -31,9 +31,9 @@ There is **one file to double-click**. Pick the line that matches your computer:
 4. **Extra Libraries** – optional extras such as Wiktionary, Project Gutenberg books, Stack Exchange Q&A and
    preparedness guides (type numbers like `1,3`, or `all`, or just press Enter for none).
 5. **Share on home Wi-Fi** for phones and tablets – off unless you say yes.
-6. **Offline maps** – optional. Vancouver Island, British Columbia and Alberta are inside the one Canada map
-   (about 10 GB; Kiwix does not publish those three places alone). Broader regions are separate files.
-   Press Enter for none. Easy Install skips this.
+6. **Offline maps** – optional. Vancouver Island, British Columbia, Alberta and Saskatchewan are inside the one Canada map
+   (about 10 GB). Kiwix publishes Canada as one file, so picking any combination, or Canada itself, downloads it once.
+   Other regions are separate files. Press Enter for none. Easy Install skips this.
 7. **Summary** – every choice, the total download size and your free space, then **Proceed? (Y/N)**.
 
 **How do I check which Mac I have?** Click the **Apple menu** () in the top-left corner, then **About This Mac**.
@@ -46,7 +46,7 @@ it is a PC. Use the Windows file.
 ## How to get it
 
 1. **Download the kit:** go to the **[latest release](https://github.com/wallenberg4001-del/offline-ai-kit/releases/latest)**
-   and click **`Offline-AI-Kit-x.y.z.zip`** under **Assets** (for example `Offline-AI-Kit-1.2.0.zip`).
+   and click **`Offline-AI-Kit-x.y.z.zip`** under **Assets** (for example `Offline-AI-Kit-1.2.1.zip`).
    *(Or, on this page, click the green **Code** button, then **Download ZIP**. That works too.)*
 2. **Unzip it.**
    - **Windows:** right-click the ZIP, choose **Properties**, tick **Unblock**, click **OK**.
@@ -186,9 +186,11 @@ Optional regional maps you can add in the Setup Wizard (step 6) or any time from
 They are clean offline browser maps from Kiwix (`zim/maps` on download.kiwix.org): the same mirror choice, resume
 and SHA-256 check as the rest of the library. Easy Install does not ask and does not download them.
 
-Vancouver Island, British Columbia and Alberta are easy choices. Kiwix publishes them inside the one Canada map
-(`maps_en_canada`, about 10 GB), not as three separate files. Picking more than one of those three downloads that
-file once. Broader regions (United States, North America, Europe, the whole world) are their own larger files.
+Vancouver Island, British Columbia, Alberta and Saskatchewan are easy choices. Kiwix publishes Canada as one file
+(`maps_en_canada`, about 10 GB), so picking any combination of those, or `canada`, downloads that file once.
+Other regions (United States, North America, Central and South America, the United Kingdom, Europe, the Nordics,
+France, Germany, Italy, Switzerland, Australia, New Zealand, Australia and Oceania, Asia, Southeast Asia, Africa,
+and the whole world) are their own files.
 
 Open **Offline maps** on the chat page. With Share on Wi-Fi, a phone opens the same page through the chat address
 (port 8091). The map program itself stays on this computer.
@@ -308,7 +310,7 @@ libraries and the maps on a FAT32 drive and tells you to use exFAT, NTFS or APFS
    - **Step 3 – Full English Wikipedia** – `Y` or `N`.
    - **Step 4 – Extra Libraries** – numbers like `1,3`, `all`, or Enter for none.
    - **Step 5 – Share on home Wi-Fi** – `N` (default) or `Y`.
-   - **Step 6 – Offline maps** – numbers like `1,4`, `all`, or Enter for none. The first three choices share one Canada file.
+   - **Step 6 – Offline maps** – numbers like `1,4`, `all`, or Enter for none. Vancouver Island, British Columbia, Alberta, Saskatchewan and Canada share one file.
    - **Step 7 – Summary** – check the sizes and free space, then `Y` to start downloading (`N` changes nothing).
 3. Wait. It downloads the programs, the library and the AI models, and **checks every file**
    against the official checksum so nothing is corrupted. If the internet drops, just run

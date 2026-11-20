@@ -140,11 +140,13 @@ still work when the internet or power is out.
       repair, outdoors), emergency preparedness guides.
       Type the numbers you want. Needs internet to download.
 
-   3) Add offline maps - Vancouver Island, British Columbia
-      and Alberta are inside the one Canada map (about 10 GB).
-      Broader regions are separate files. Easy Install does
-      not download maps. Phones on home Wi-Fi open them from
-      the chat address. Needs internet to download.
+   3) Add offline maps - Vancouver Island, British Columbia,
+      Alberta and Saskatchewan are inside the one Canada map
+      (about 10 GB). Picking those, or Canada, downloads that
+      file once. Other regions are separate files. Easy
+      Install does not download maps. Phones on home Wi-Fi
+      open them from the chat address. Needs internet to
+      download.
 
    4) Check for updates - only when you ask, needs internet.
       It never downloads or changes anything by itself.

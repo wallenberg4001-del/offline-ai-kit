@@ -4,7 +4,7 @@
 #   add-maps.ps1 -List           (show the list and what is already added)
 #   add-maps.ps1 -Add alberta,europe      (numbers from -List work too; "all" = every map file)
 #   add-maps.ps1 -Remove alberta (drops that region; the shared Canada file stays if another region still uses it)
-# Vancouver Island, British Columbia and Alberta are the same Canada file and download once.
+# Vancouver Island, British Columbia, Alberta, Saskatchewan and Canada are the same Canada file and download once.
 # Downloads use the fastest mirror, resume if interrupted, are checked with SHA-256, and the
 # library restarts afterwards. Phones on Share on Wi-Fi open the maps through port 8091.
 param([switch]$List, [string]$Add = '', [string]$Remove = '', [switch]$Yes)
@@ -52,7 +52,7 @@ if ($Remove) {
 if (-not $Add) {
   Write-Host '=================================================='
   Write-Host '  Add offline maps (needs internet while downloading)'
-  Write-Host '  Vancouver Island, British Columbia and Alberta are one Canada file (about 10 GB).'
+  Write-Host '  Vancouver Island, British Columbia, Alberta, Saskatchewan and Canada are one file (about 10 GB).'
   Write-Host '=================================================='
   Show-MapCatalog $cat
   Write-Host ("  Free space on this drive: {0}" -f (Format-GB (Get-FreeBytes $Library)))

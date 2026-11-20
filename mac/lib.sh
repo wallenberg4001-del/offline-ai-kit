@@ -286,9 +286,17 @@ sha256_of() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | aw
 md5_of()    { if command -v md5 >/dev/null 2>&1; then md5 -q "$1"; else md5sum "$1" | awk '{print $1}'; fi; }
 free_bytes() { df -Pk "$1" | awk 'NR==2 { printf "%.0f\n", $4 * 1024 }'; }
 fs_type() { # filesystem name of the volume that holds this path (lowercase)
-  local p="$1" t=""
+  local p="$1" t="" dev=""
   if [ "$(uname -s)" = Darwin ]; then
-    t="$(diskutil info "$p" 2>/dev/null | awk -F': ' '/File System Personality/ { gsub(/^ +| +$/, "", $2); print $2; exit }')"
+    # diskutil info on a folder inside FAT32/exFAT fails with "Could not find disk".
+    # Look up the device first, then fall back to the path.
+    dev="$(df -Pk "$p" 2>/dev/null | awk 'NR==2 { print $1 }')"
+    if [ -n "$dev" ]; then
+      t="$(diskutil info "$dev" 2>/dev/null | awk -F': ' '/File System Personality/ { gsub(/^ +| +$/, "", $2); print $2; exit }')"
+    fi
+    if [ -z "$t" ]; then
+      t="$(diskutil info "$p" 2>/dev/null | awk -F': ' '/File System Personality/ { gsub(/^ +| +$/, "", $2); print $2; exit }')"
+    fi
   elif command -v findmnt >/dev/null 2>&1; then
     t="$(findmnt -no FSTYPE -T "$p" 2>/dev/null | head -1)"
   elif df -T "$p" >/dev/null 2>&1; then
@@ -831,7 +839,7 @@ show_map_catalog() {
   done <<EOF_MAP
 $(map_catalog)
 EOF_MAP
-  say '  [x] = already added. Vancouver Island, British Columbia and Alberta share one Canada file (counted once).'
+  say '  [x] = already added. Vancouver Island, British Columbia, Alberta, Saskatchewan and Canada share one Canada file (counted once).'
   say '  "all" downloads every different map file in this list.'
 }
 resolve_map_ids() { # "1,3" / "alberta europe" / "all" -> ids, one per line
