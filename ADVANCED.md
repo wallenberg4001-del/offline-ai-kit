@@ -162,18 +162,19 @@ Off by default (`SHARE_ON_WIFI=0`): Kiwix, Ollama and the chat page listen on `1
 | Part | Listens on | Notes |
 |---|---|---|
 | Ollama (the kit's AI server) | **`127.0.0.1:11435` always** | never exposed to the network |
-| Kiwix library | `0.0.0.0:8090` | so citation links open on the phone (`http://<lan-ip>:8090/content/...`) |
-| Chat page server | `0.0.0.0:8091` | serves `www/`, `/status.json`, and `/ollama/api/...` → `127.0.0.1:11435` |
+| Kiwix library | **`127.0.0.1:8090` always** | phones reach it through the chat page server |
+| Chat page server | `0.0.0.0:8091` | the only thing on the network: serves `www/`, `/status.json`, `/ollama/api/...` → `127.0.0.1:11435`, and the library pages (`/library/` home, `/content/...`, `/search`, `/catalog/...`, `/skin/...`, read-only GET/HEAD) → `127.0.0.1:8090` |
 
 - The `/ollama/` proxy only passes `GET /api/tags`, `/api/version`, `/api/ps` and `POST /api/chat`, `/api/generate`,
   `/api/show`, `/api/embed(dings)`. Pulling, deleting, copying or creating models returns 403. Responses are copied
   through byte for byte as they arrive, so streamed answers stay streamed.
 - The page decides where to send requests (`AskLibrary.endpoints()` in `www/ask-library.js`): opened as a file or from
   `127.0.0.1`/`localhost` it talks to `127.0.0.1` directly; opened from any other host name (a phone) it uses
-  `http://<that host>:8091/ollama` and `http://<that host>:8090`.
+  `http://<that host>:8091/ollama` for the AI and `http://<that host>:8091` for the library (citation links open
+  on the phone). Only one program accepts network connections, so there is only one firewall question to answer.
 - **Windows:** `scripts\serve-chat.ps1` uses a `TcpListener` (binding `0.0.0.0` needs no admin rights, unlike
   `HttpListener`) and a pool of worker threads. Windows Firewall decides whether other devices get through: allow
-  *Windows PowerShell* and *kiwix-serve* on **Private** networks when asked, and set the home network to Private.
+  *Windows PowerShell* on **Private** networks when asked, and set the home network to Private.
   Creating firewall rules needs an administrator; the kit never changes the firewall itself.
 - **Mac:** `mac/serve-chat.pl` (perl and `IO::Socket::INET` ship with macOS; one forked process per connection).
   If perl were missing it falls back to `mac/serve-chat.py`, but only when `xcode-select -p` succeeds or `python3` is

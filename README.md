@@ -140,11 +140,11 @@ the library in their web browser – handy in a power cut when the laptop is the
 - **What stays private:** the AI program itself always listens only to the computer it runs on. Phones reach it
   through the chat page, which only allows chatting – not downloading, deleting or changing AI models.
 - **Phone can't connect?**
-  - Windows: the first time, Windows may ask whether to allow **Windows PowerShell** and **kiwix-serve** – tick
+  - Windows: the first time, Windows may ask whether to allow **Windows PowerShell** – tick
     **Private networks** and click **Allow**. Your home network must be set to **Private** (Settings → Network &
     internet → your Wi-Fi or Ethernet → **Private network**). Allowing apps through the firewall needs an
     administrator account.
-  - Mac: if the Mac asks whether **kiwix-serve** or **perl** may "accept incoming connections", click **Allow**.
+  - Mac: if the Mac asks whether **perl** may "accept incoming connections", click **Allow**.
   - Make sure the phone is on the **same Wi-Fi** (not mobile data, not a guest network).
 
 ## 📚 Extra Libraries
@@ -468,9 +468,9 @@ Only one model is loaded at a time, so they don't add up in GPU memory.
   (which uses port 11434), so you can have both.
 - On Windows a tiny PowerShell web server shows the chat page on `127.0.0.1:8091`. No Python needed.
   On Mac the page is opened directly from the kit folder (see Mac notes).
-- **Share on Wi-Fi** (off by default): the library listens on the home network (port 8090) and the chat page server
-  on port 8091, which passes chat requests on to the AI program. The AI program itself (port 11435) always stays on
-  `127.0.0.1`, and only chat/list requests are passed through. The QR code is made inside the page, offline.
+- **Share on Wi-Fi** (off by default): only the chat page server (port 8091) listens on the home network. It passes
+  chat requests on to the AI program and library pages on to Kiwix. The AI program (port 11435) and the library
+  (port 8090) always stay on `127.0.0.1`; only chat/list requests and read-only library pages are passed through. The QR code is made inside the page, offline.
 - **Ask the library** is plain JavaScript in the chat page (`www/ask-library.js`). It uses Kiwix's built-in search,
   reads the articles straight from Kiwix, and sends them to the kit's Ollama. No extra programs, no extra index.
 - Unless Share on Wi-Fi is on, everything listens only on `127.0.0.1` (this computer), not your network.

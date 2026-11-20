@@ -572,9 +572,8 @@ function Set-ShareOnWifi([bool]$On, [switch]$Apply) {
   if (-not $Apply) { return }
   $running = (Get-KitProcess 'kiwix') -or (Get-KitProcess 'chat-server')
   if (-not $running) { Write-Host '  The kit is not running; this applies the next time you start it.'; return }
-  Write-Host '  Restarting the library and chat page...'
+  Write-Host '  Restarting the chat page server...'
   Write-ChatConfig
-  Start-KitKiwix | Out-Null
   Stop-KitProcess 'chat-server'
   for ($i = 0; $i -lt 20 -and (Test-Port $ChatPort); $i++) { Start-Sleep -Milliseconds 250 }
   Start-ChatServer | Out-Null
@@ -586,7 +585,7 @@ function Show-ShareStatus {
     Write-Host '  Share on Wi-Fi: ON' -ForegroundColor Green
     if ($u) { Write-Host "    Phones and tablets on the same Wi-Fi open:  $($u.Chat)" -ForegroundColor Green; Write-Host '    (the chat page also shows a QR code to scan)' }
     else { Write-Host '    No home network found right now (is Wi-Fi or Ethernet connected?).' -ForegroundColor Yellow }
-    Write-Host '    If a phone cannot connect: when Windows asks, allow "Windows PowerShell" and "kiwix-serve" on Private networks,'
+    Write-Host '    If a phone cannot connect: when Windows asks, allow "Windows PowerShell" on Private networks,'
     Write-Host '    and make sure your home Wi-Fi is set to "Private" (Settings > Network & internet > your network).'
     Write-WifiWarning
   } else {
