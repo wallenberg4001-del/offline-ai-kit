@@ -54,6 +54,19 @@
   }
   textarea { flex: 1; min-height: 56px; max-height: 160px; padding: 8px 10px; resize: vertical; }
   .status { font-size: 12px; color: var(--muted); padding: 0 16px 8px; background: var(--panel); }
+  .toggle { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--ink); cursor: pointer; }
+  .toggle input { width: 16px; height: 16px; accent-color: var(--accent); }
+  .msg .who.lib { color: var(--accent); }
+  .msg .who.mem { color: var(--warn); }
+  .msg a.cite { text-decoration: none; font-weight: 600; font-size: 0.85em; vertical-align: super; padding: 0 1px; }
+  .sources { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 13px; white-space: normal; }
+  .sources b { color: var(--muted); font-weight: 600; }
+  .sources ol { margin: 4px 0 0; padding-left: 22px; }
+  .sources li { margin: 2px 0; }
+  .sources .from { color: var(--muted); }
+  .note { margin-top: 8px; font-size: 12px; color: var(--muted); white-space: normal; }
+  .note.med { color: var(--warn); }
+  .msg button.memory { margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -67,6 +80,9 @@
       <select id="model"></select>
     </label>
     <button type="button" class="secondary" id="reloadModels">Refresh models</button>
+    <label class="toggle" title="On: the AI looks things up in the Offline Library first and shows the articles it used. Off: the AI answers from its own memory.">
+      <input type="checkbox" id="libMode" checked> Ask the library (answers with sources)
+    </label>
     <a id="libLink" href="http://127.0.0.1:8090/" target="_blank" rel="noopener">Open Offline Library</a>
   </div>
 </header>
@@ -79,6 +95,7 @@
   <button type="button" id="send">Ask</button>
 </footer>
 <script src="kit-config.js"></script>
+<script src="ask-library.js"></script>
 <script>
 (function () {
   // Ports come from kit-config.js (written by the START script); these are the defaults.
@@ -113,12 +130,18 @@
     "medgemma:4b": "Medical-tuned — still verify in the library"
   };
 
-  function addMsg(role, text, isError) {
+  const libModeEl = document.getElementById("libMode");
+  try { if (localStorage.getItem("askLibrary") === "off") libModeEl.checked = false; } catch (e) { /* storage blocked */ }
+  libModeEl.addEventListener("change", function () {
+    try { localStorage.setItem("askLibrary", libModeEl.checked ? "on" : "off"); } catch (e) { /* storage blocked */ }
+  });
+
+  function addMsg(role, text, isError, whoText, whoClass) {
     const div = document.createElement("div");
     div.className = "msg " + role + (isError ? " error" : "");
     const who = document.createElement("div");
-    who.className = "who";
-    who.textContent = role === "user" ? "You" : "Advisor";
+    who.className = "who" + (whoClass ? " " + whoClass : "");
+    who.textContent = whoText || (role === "user" ? "You" : "Advisor");
     const body = document.createElement("div");
     body.textContent = text;
     div.appendChild(who);
@@ -126,6 +149,129 @@
     logEl.appendChild(div);
     logEl.scrollTop = logEl.scrollHeight;
     return body;
+  }
+  function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function setWho(bodyEl, text, cls) { const w = bodyEl.parentNode.querySelector(".who"); w.textContent = text; w.className = "who " + (cls || ""); }
+  function medNote(parent, fromMemory) {
+    parent.appendChild(el("div", "note med", "Not medical advice. " + (fromMemory ? "Look it up in the Offline Library (WikiMed, Wikipedia Medicine)" : "Check the linked articles yourself") + ", and in an emergency call your local emergency number (911 in Canada and the US)."));
+  }
+
+  // Answer from the model's own memory (the original chat behaviour), clearly labelled as such.
+  async function memoryAnswer(text, bodyEl) {
+    const model = modelEl.value;
+    setWho(bodyEl, "Advisor \u2014 from the AI's memory (not the library)", "mem");
+    bodyEl.textContent = "Thinking\u2026";
+    const answer = await AskLibrary.ollamaChat(API, model, [
+      { role: "system", content: SYSTEM },
+      { role: "user", content: text }
+    ], function (acc) { bodyEl.textContent = acc; logEl.scrollTop = logEl.scrollHeight; },
+    { temperature: 0.3, num_ctx: 4096, num_predict: 1024 });
+    if (!answer) { bodyEl.textContent = "(No text came back. Try a smaller model such as llama3.2:3b.)"; return; }
+    bodyEl.appendChild(el("div", "note", "This answer comes from the AI's memory, not from the library, so it can be wrong. Check important things in the Offline Library."));
+    if (AskLibrary.looksMedical(text + " " + answer)) medNote(bodyEl, true);
+  }
+
+  function memoryButton(bodyEl, text) {
+    const b = el("button", "secondary memory", "Answer from the AI's memory instead");
+    b.type = "button";
+    b.addEventListener("click", async function () {
+      b.remove();
+      const ans = addMsg("bot", "Thinking\u2026");
+      await runGuarded(ans, function () { return memoryAnswer(text, ans); });
+    });
+    bodyEl.appendChild(b);
+  }
+
+  function renderAnswer(bodyEl, res) {
+    bodyEl.textContent = "";
+    const byN = {};
+    res.sources.forEach(function (s) { byN[s.n] = s; });
+    const parts = res.answer.split(/(\[\d+\])/);
+    parts.forEach(function (p) {
+      const m = p.match(/^\[(\d+)\]$/);
+      if (m && byN[+m[1]]) {
+        const a = el("a", "cite", "[" + m[1] + "]");
+        a.href = byN[+m[1]].url; a.target = "_blank"; a.rel = "noopener"; a.title = byN[+m[1]].title;
+        bodyEl.appendChild(a);
+      } else if (p) bodyEl.appendChild(document.createTextNode(p));
+    });
+    const box = el("div", "sources");
+    const cited = res.sources.filter(function (s) { return res.cited.indexOf(s.n) !== -1; });
+    box.appendChild(el("b", null, cited.length ? "Sources from your offline library:" : "The AI did not mark which article it used. These are the library articles it was given:"));
+    const ol = el("ol");
+    (cited.length ? cited : res.sources).forEach(function (s) {
+      const li = el("li"); li.value = s.n;
+      const a = el("a", null, s.title); a.href = s.url; a.target = "_blank"; a.rel = "noopener";
+      li.appendChild(a); li.appendChild(el("span", "from", " \u2014 " + s.book));
+      ol.appendChild(li);
+    });
+    box.appendChild(ol);
+    bodyEl.appendChild(box);
+    let note = "Written by the AI from the articles above. Click a number or title to read the article itself.";
+    if (res.removed && res.removed.length) note += " (" + res.removed.length + " made-up reference(s) were removed.)";
+    bodyEl.appendChild(el("div", "note", note));
+    if (res.medical) medNote(bodyEl);
+  }
+
+  function renderNotFound(bodyEl, res, text) {
+    setWho(bodyEl, "Advisor \u2014 offline library", "lib");
+    let msg;
+    if (res.reason === "model_said_no") msg = "I found some library articles, but they don't answer this question.";
+    else if (res.searched === 0) msg = "None of the installed library collections can be searched by the chat (they are PDF or picture collections). You can still browse them in the Offline Library.";
+    else if (res.reason === "no_keywords") msg = "Please ask with a few more specific words (for example: \"how to purify water with bleach\").";
+    else msg = "I couldn't find this in the offline library (searched " + res.searched + " collection" + (res.searched === 1 ? "" : "s") + ").";
+    bodyEl.textContent = msg;
+    if (res.sources && res.sources.length) {
+      const box = el("div", "sources");
+      box.appendChild(el("b", null, "Articles checked:"));
+      const ol = el("ol");
+      res.sources.forEach(function (s) {
+        const li = el("li"); const a = el("a", null, s.title); a.href = s.url; a.target = "_blank"; a.rel = "noopener";
+        li.appendChild(a); li.appendChild(el("span", "from", " \u2014 " + s.book)); ol.appendChild(li);
+      });
+      box.appendChild(ol); bodyEl.appendChild(box);
+    }
+    bodyEl.appendChild(el("div", "note", "You can try other words, browse the Offline Library, or let the AI answer from its own memory (it can be wrong)."));
+    if (AskLibrary.looksMedical(text)) medNote(bodyEl, true);
+    memoryButton(bodyEl, text);
+  }
+
+  async function libraryAnswer(text, bodyEl) {
+    setWho(bodyEl, "Advisor \u2014 from your offline library", "lib");
+    let res;
+    try {
+      res = await AskLibrary.ask({
+        libraryBase: LIB, ollamaBase: API, model: modelEl.value, question: text,
+        onProgress: function (m) { bodyEl.textContent = m; },
+        onToken: function (acc) { bodyEl.textContent = acc; logEl.scrollTop = logEl.scrollHeight; }
+      });
+    } catch (e) {
+      if (/Failed to fetch|NetworkError|Load failed|aborted|HTTP 5/i.test(e.message) && !/api\/chat/.test(e.message)) {
+        const ok = await fetch(API + "/api/tags").then(function (r) { return r.ok; }, function () { return false; });
+        if (ok) {
+          bodyEl.textContent = "I couldn't reach the Offline Library at " + LIB + " (it may still be starting, or it has no collections yet).";
+          bodyEl.appendChild(el("div", "note", "Start the kit with START-OFFLINE-AI, or switch off \"Ask the library\" at the top to use the AI on its own."));
+          memoryButton(bodyEl, text);
+          return;
+        }
+      }
+      throw e;
+    }
+    if (res.status === "answered") renderAnswer(bodyEl, res);
+    else renderNotFound(bodyEl, res, text);
+  }
+
+  async function runGuarded(bodyEl, fn) {
+    sendEl.disabled = true;
+    try { await fn(); }
+    catch (e) {
+      bodyEl.parentNode.classList.add("error");
+      bodyEl.textContent = "Request failed: " + e.message + "\n\nIs the kit running (START-OFFLINE-AI)? If a big model is too slow, switch to qwen3.5:9b or llama3.2:3b.";
+    } finally {
+      sendEl.disabled = false;
+      promptEl.focus();
+      logEl.scrollTop = logEl.scrollHeight;
+    }
   }
 
   async function loadModels() {
@@ -161,65 +307,13 @@
   async function ask() {
     const text = promptEl.value.trim();
     if (!text) return;
-    const model = modelEl.value;
-    if (!model) { statusEl.textContent = "No model selected."; return; }
+    if (!modelEl.value) { statusEl.textContent = "No model selected."; return; }
     promptEl.value = "";
     addMsg("user", text);
-    const bodyEl = addMsg("bot", "Thinking…");
-    sendEl.disabled = true;
-    try {
-      const r = await fetch(API + "/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: model,
-          messages: [
-            { role: "system", content: SYSTEM },
-            { role: "user", content: text }
-          ],
-          stream: true,
-          think: false,
-          keep_alive: "5m",
-          options: { temperature: 0.3, num_ctx: 4096, num_predict: 1024 }
-        })
-      });
-      if (!r.ok) {
-        const t = await r.text();
-        throw new Error("HTTP " + r.status + " " + t);
-      }
-      const reader = r.body.getReader();
-      const dec = new TextDecoder();
-      let acc = "";
-      let buf = "";
-      bodyEl.textContent = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += dec.decode(value, { stream: true });
-        const lines = buf.split("\n");
-        buf = lines.pop() || "";
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
-          let obj;
-          try { obj = JSON.parse(line); } catch (e) { continue; }
-          const piece = (obj.message && obj.message.content) || obj.response || "";
-          if (piece) {
-            acc += piece;
-            bodyEl.textContent = acc;
-            logEl.scrollTop = logEl.scrollHeight;
-          }
-          if (obj.error) throw new Error(obj.error);
-        }
-      }
-      if (!acc) bodyEl.textContent = "(No text came back. Try a smaller model such as llama3.2:3b.)";
-    } catch (e) {
-      bodyEl.parentNode.classList.add("error");
-      bodyEl.textContent = "Request failed: " + e.message + "\n\nIs the kit running (START-OFFLINE-AI)? If a big model is too slow, switch to qwen3.5:9b or llama3.2:3b.";
-    } finally {
-      sendEl.disabled = false;
-      promptEl.focus();
-    }
+    const bodyEl = addMsg("bot", "Thinking\u2026");
+    await runGuarded(bodyEl, function () {
+      return libModeEl.checked ? libraryAnswer(text, bodyEl) : memoryAnswer(text, bodyEl);
+    });
   }
 
   document.getElementById("reloadModels").addEventListener("click", loadModels);

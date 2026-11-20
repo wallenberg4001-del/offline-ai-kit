@@ -144,15 +144,53 @@ the chat page is served from `http://127.0.0.1:8091`, which Ollama allows by def
 | `library/` | `.zim` files + `checksums/VERIFIED` markers (shared by both platforms) |
 | `ollama-models/`, `home/` | the kit's AI models and Ollama settings (shared) |
 | `logs/` | logs, pid files, `wikipedia-progress.json` |
-| `www/` | chat page; START writes `kit-config.js` (ports) and on Mac `wiki-status.js` |
+| `www/` | chat page (`chat.html`, `ask-library.js`, `selftest.html`); START writes `kit-config.js` (ports) and on Mac `wiki-status.js` |
+| `tests/` | offline checks for `ask-library.js` (`node tests/ask-library.test.js`; not needed to run the kit) |
 | `kit-config.json` / `kit-config-mac.txt` | what setup chose last time |
 
 Uninstall: run STOP, then delete the kit folder (and the Desktop shortcut). Nothing else is installed.
 
+## Ask the library: how it works
+
+The chat page's **Ask the library** switch (on by default; remembered per browser) is all in `www/ask-library.js`,
+loaded by `www/chat.html`. Nothing else runs for it.
+
+1. **Which collections?** `GET http://127.0.0.1:8090/catalog/v2/entries?count=-1`. Collections tagged `_ftindex:no`
+   (the zimgit knots/water/food/medicine/post-disaster PDF collections) have no text index and are skipped.
+2. **Search.** For every searchable collection, in parallel:
+   `/search?content=<book>&pattern=<keywords>&format=xml&pageLength=8` (Kiwix needs **all** words to match), plus
+   `/suggest?content=<book>&term=<word or word pair>` for article titles, plus single-word searches when the all-words
+   search finds fewer than 5. Filler words are dropped first ("how do I stop heavy bleeding" → `stop heavy bleeding`).
+3. **Rank and read.** Results are scored (title matches, exact titles, Kiwix rank), the best 6 (max 3 per collection)
+   are fetched from `/content/...`, turned into text (references, tables, navigation boxes removed), and the lead
+   paragraph plus the paragraphs matching the keywords are kept – about 7,500 characters in total.
+   An article only counts if its title matches a keyword or it contains at least half of the keywords; up to 3 are used.
+   Disambiguation and "List of …" pages are skipped.
+4. **Answer.** The AI gets the numbered passages and is told to answer only from them, cite `[n]`, and reply
+   `NOT_IN_LIBRARY` if they don't answer the question (`num_ctx` 8192, temperature 0.2).
+5. **Check.** Every `[n]` / `[n, m]` / `[n-m]` that isn't one of the fetched articles is removed, as are web links and
+   any "Sources:" list the AI wrote itself. The list under the answer is built only from the fetched articles.
+   No results, no relevant articles, or `NOT_IN_LIBRARY` → "couldn't find this in the offline library" plus a button
+   for a memory-only answer, labelled as such.
+
+**Why no proxy?** `kiwix-serve` 3.x (what setup installs) sends `Access-Control-Allow-Origin: *` on its search,
+suggest, catalog and content responses, so the chat page can read it directly – from `http://127.0.0.1:8091`
+(Windows) and from a `file://` page (Mac, origin `null`). The kit's Ollama already allows any origin
+(`OLLAMA_ORIGINS=*`). Both still listen only on `127.0.0.1`. If you point the kit at a very old kiwix-serve without
+that header, the chat says it can't reach the library; untick **Ask the library** or update Kiwix by re-running setup.
+
+**Self-test page.** With the kit running, open `www/selftest.html` (Windows: http://127.0.0.1:8091/selftest.html;
+Mac: double-click `www/selftest.html` or drag it into the browser). It checks, with the real library and model:
+the catalog is readable, a question gets an answer whose sources all open (HTTP 200), a nonsense question gives
+"not in the library", and a forged `[n]` and a fake link are removed. Add `#q=your question` to try another question,
+or `#model=llama3.2:3b` to pick the model. Automated tests can add `#report=http://127.0.0.1:PORT/` to receive the
+JSON result by POST (127.0.0.1 only).
+
 ## Test mode (for trying the kit quickly)
 
-Test mode installs a **tiny** version: 2 small library files (knots, water), one small model (`llama3.2:3b`,
-~2 GB), and a **13 MB stand-in for Wikipedia** (`wikipedia_en_knots_maxi`) so the background download, checksum,
+Test mode installs a **tiny** version: 3 small library files (knots, water, and a 170 MB intros-only Wikipedia
+Medicine, `wikipedia_en_medicine_mini`, so **Ask the library** can be tried with a first-aid question), one small
+model (`llama3.2:3b`, ~2 GB), and a **13 MB stand-in for Wikipedia** (`wikipedia_en_knots_maxi`) so the background download, checksum,
 VERIFIED marker and automatic library restart are all exercised in minutes. Total download ≈ 2–4 GB
 (Windows also downloads the 1.6 GB Ollama program).
 

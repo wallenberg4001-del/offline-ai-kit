@@ -107,7 +107,7 @@ $WikipediaGB = 127.4
 
 # ---------- Test mode (for trying the kit quickly) ----------
 # OFFLINE_AI_TEST=1 (env), -Test (setup) or TEST_MODE=yes (kit-settings.ini):
-#   tiny library (2 files), one small model, and a 13 MB Wikipedia stand-in
+#   tiny library (3 files), one small model, and a 13 MB Wikipedia stand-in
 #   (wikipedia_en_knots_maxi) so the background download / verify / library restart is exercised.
 # OFFLINE_AI_SKIP_WIKIPEDIA=1 (env) skips Wikipedia entirely.
 $TestMode = (($env:OFFLINE_AI_TEST -match '^(?i)(1|yes|true)$') -or ((Get-Setting 'TEST_MODE' 'no') -match '^(?i)(yes|true|1)$'))
@@ -117,6 +117,8 @@ function Enable-TestMode {
   $script:WikipediaPrefix = 'wikipedia_en_knots_maxi'
   $script:WikipediaGB = 0.02
   foreach ($e in $ZimCatalog) { if ($e.Id -eq 'wikipedia') { $e.Prefix = 'wikipedia_en_knots_maxi'; $e.About = 'TEST stand-in for full Wikipedia (13 MB)' } }
+  # Small searchable medical stand-in (~170 MB) so 'Ask the library' can be tested with a first-aid question.
+  foreach ($e in $ZimCatalog) { if ($e.Id -eq 'wpmed') { $e.Prefix = 'wikipedia_en_medicine_mini'; $e.About = 'TEST stand-in for Wikipedia medicine (intros only, ~170 MB)' } }
 }
 if ($TestMode) { Enable-TestMode }
 $ProgramsGB  = 2.5

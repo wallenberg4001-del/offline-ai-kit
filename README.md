@@ -22,7 +22,9 @@ it is a PC. Use the Windows file.
 
 ## How to get it
 
-1. On this page, click the green **Code** button, then **Download ZIP**.
+1. **Download the kit:** go to the **[latest release](https://github.com/wallenberg4001-del/offline-ai-kit/releases/latest)**
+   and click **`Offline-AI-Kit-x.y.z.zip`** under **Assets** (for example `Offline-AI-Kit-1.0.0.zip`).
+   *(Or, on this page, click the green **Code** button, then **Download ZIP**. That works too.)*
 2. **Unzip it.**
    - **Windows:** right-click the ZIP, choose **Properties**, tick **Unblock**, click **OK**.
      Then right-click the ZIP again and choose **Extract All…**
@@ -70,6 +72,8 @@ An external drive (USB SSD) is fine. Copy the unzipped folder onto it first, the
 
 1. **A chat assistant (AI)** – like ChatGPT, but it runs entirely on your own computer. Ask it how to purify water,
    treat a burn, fix a leaking pipe, cook without power, or anything else. Nothing you type ever leaves the computer.
+   By default it **looks the answer up in the offline library first** and shows the articles it used, as clickable
+   numbers like **[1] [2]** (see [Ask the library](#ask-the-library-answers-with-sources)).
 2. **An offline library** you can search and read in your web browser – including **all of English Wikipedia with
    pictures**, a medical encyclopedia, first-aid and survival guides, and repair manuals.
 
@@ -121,6 +125,14 @@ It only uses the computer while it's running, and STOP turns it off. To remove i
 
 **Is the AI always right?** No – it can make mistakes. For medical or safety questions, also check the library, and call
 emergency services when you can. The kit is a helper, not a doctor.
+
+**What are the [1] [2] numbers in answers?** They are the library articles the answer came from. Click one to read
+that article. The kit checks every number: it only ever shows articles it really opened from your library, and it
+removes any number or link the AI made up. If the library has nothing on your question, it says so, and offers an
+answer from the AI's own memory instead – clearly marked as **not** from the library.
+
+**Can I turn the sources off?** Yes. Untick **Ask the library** at the top of the chat page. The AI then answers from
+its memory only (faster, but more likely to be wrong).
 
 **Can I put it on a USB/external drive?** Yes, and the same drive can be used on Windows, Apple-chip Macs and Intel Macs.
 
@@ -304,6 +316,34 @@ by itself so Wikipedia appears. Progress shows in `STATUS-MAC.command` and at th
 
 ---
 
+## Ask the library (answers with sources)
+
+The chat page has a switch at the top: **Ask the library (answers with sources)**. It is **on** by default.
+
+When it is on, each question goes like this:
+
+1. The kit searches your Offline Library – WikiMed, Wikipedia Medicine, iFixit, Appropedia, Wikivoyage, gardening
+   Q&A and, once it has downloaded, **full Wikipedia** – using the library's own search.
+2. It opens the best few articles and keeps the parts that match your question.
+3. The AI writes the answer **only from those parts**, putting **[1]**, **[2]** after each point.
+4. Under the answer you get the list of articles. Click a number or a title to read the article itself.
+
+Safety checks:
+
+- **Only real sources.** Every number is checked against the articles the kit actually opened. A number that doesn't
+  match one of them, or a web link, is removed (the answer then says so). The list only ever shows articles from your library.
+- **Not in the library?** It tells you, and gives you a button to get an answer from the AI's memory instead. That
+  answer is labelled **"from the AI's memory (not the library)"**.
+- Medical answers keep the **"not medical advice – call your emergency number"** note.
+
+Good to know:
+
+- Some survival collections (knots, water, food, medicine and post-disaster guides) are **PDF and picture
+  collections**. The chat can't read inside those, but you can still open them in the Offline Library.
+- Asking the library takes a few seconds longer than a plain answer. Small models (like `llama3.2:3b`) sometimes
+  forget to add numbers; the kit then lists the articles it gave the AI so you can still check.
+- Short, specific questions work best ("how to treat a burn", "purify water with bleach").
+
 ## Using it with no internet
 
 Nothing to change – just double-click `START-OFFLINE-AI.bat` (Mac: `START-OFFLINE-AI-MAC.command`). It never needs the internet after setup.
@@ -335,6 +375,8 @@ Only one model is loaded at a time, so they don't add up in GPU memory.
   (which uses port 11434), so you can have both.
 - On Windows a tiny PowerShell web server shows the chat page on `127.0.0.1:8091`. No Python needed.
   On Mac the page is opened directly from the kit folder (see Mac notes).
+- **Ask the library** is plain JavaScript in the chat page (`www/ask-library.js`). It uses Kiwix's built-in search,
+  reads the articles straight from Kiwix, and sends them to the kit's Ollama. No extra programs, no extra index.
 - Everything listens only on `127.0.0.1` (this computer), not your network.
 - To move the kit to another drive, stop it and move the whole folder. Nothing is installed in Windows.
 - Program and library versions are looked up when you run setup, so you get the newest ones.
@@ -348,6 +390,8 @@ Only one model is loaded at a time, so they don't add up in GPU memory.
 | "curl.exe was not found" | Run Windows Update (curl is built into Windows 10 1803+ / 11). |
 | Setup stopped half way | Run `SETUP.bat` again. Finished files are skipped, partial ones resume. |
 | Chat says "Cannot reach the local model server" | Run `START-OFFLINE-AI.bat`. Check `logs\ollama.log`. |
+| Chat says it "couldn't reach the Offline Library" | The library is still starting or has no files yet. Wait a minute and ask again, or untick **Ask the library**. |
+| Chat says "not in the offline library" for everything | Try other, simpler words. Check the library opens at http://127.0.0.1:8090/. Open `www/selftest.html` (see ADVANCED.md) to test it. |
 | Answers are very slow | Pick a smaller model. Make sure the laptop is plugged in and on its performance mode. Update the NVIDIA driver. |
 | Library page won't open | Check `logs\kiwix.log`. Another program may be using port 8090. |
 | Wikipedia isn't in the library yet | Run `STATUS.bat` to see progress. It appears automatically when the download and check finish. |

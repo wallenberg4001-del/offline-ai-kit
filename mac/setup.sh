@@ -118,7 +118,7 @@ is_yes "${OFFLINE_AI_SKIP_WIKIPEDIA:-no}" && SKIPW=yes
 WANT_WIKI=yes; [ "$SKIPW" = yes ] && WANT_WIKI=no
 
 if [ "$TEST_MODE" = yes ]; then
-  TIER="test"; ZIMS="knots,water"; MODEL_LIST="llama3.2:3b"; [ "$AI_AVAILABLE" = yes ] || MODEL_LIST=""
+  TIER="test"; ZIMS="knots,water,wpmed"; MODEL_LIST="llama3.2:3b"; [ "$AI_AVAILABLE" = yes ] || MODEL_LIST=""
 elif [ "$EASY" = yes ]; then
   if ! pick="$(pick_profile_for_disk "$PROFILE" "$FREE_GB")"; then
     err ""

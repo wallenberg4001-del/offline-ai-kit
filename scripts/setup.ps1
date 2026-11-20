@@ -149,7 +149,7 @@ if ($TestMode) {
 }
 
 if ($TestMode) {
-  $tierName = 'test'; $Zims = 'knots,water'
+  $tierName = 'test'; $Zims = 'knots,water,wpmed'
   $modelList = @($ModelCatalog | Where-Object { $_.Name -eq 'llama3.2:3b' })
   $wantWiki = -not $SkipWikipedia
 }

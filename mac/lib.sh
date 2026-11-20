@@ -165,6 +165,8 @@ enable_test_mode() {
   WIKIPEDIA_GB=0.02
   WARN_FREE_BYTES=1000000000
   ZIM_CATALOG="$(printf '%s\n' "$ZIM_CATALOG" | sed 's#^wikipedia|zim/wikipedia|wikipedia_en_all_maxi|always|.*#wikipedia|zim/wikipedia|wikipedia_en_knots_maxi|always|TEST stand-in for full Wikipedia (13 MB)#')"
+  # Small searchable medical stand-in (~170 MB) so 'Ask the library' can be tested with a first-aid question.
+  ZIM_CATALOG="$(printf '%s\n' "$ZIM_CATALOG" | sed 's#^wpmed|zim/wikipedia|wikipedia_en_medicine_maxi|recommended|.*#wpmed|zim/wikipedia|wikipedia_en_medicine_mini|recommended|TEST stand-in for Wikipedia medicine (intros only, ~170 MB)#')"
 }
 if is_yes "${OFFLINE_AI_TEST:-no}" || is_yes "$(setting TEST_MODE no)"; then enable_test_mode; fi
 if is_yes "${OFFLINE_AI_SKIP_WIKIPEDIA:-no}"; then SKIP_WIKIPEDIA=yes; fi

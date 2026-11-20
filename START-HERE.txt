@@ -93,6 +93,14 @@ still work when the internet or power is out.
  *  Type your question in the box at the bottom of the chat
     page and click  Ask.
 
+ *  The chat looks up the answer in the library first. The
+    numbers like [1] [2] show which library article each part
+    came from - click one to read it. If the library has
+    nothing on it, the chat says so and offers an answer from
+    the AI's own memory instead (that one is marked as NOT
+    from the library). To switch this off, untick
+    "Ask the library" at the top of the chat page.
+
  *  The assistant can be WRONG. For medicine or first aid,
     also look it up in the library, and call 911 when you can.
 

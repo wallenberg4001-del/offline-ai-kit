@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Offline AI - Ask the library self-test</title>
+<style>
+  body { background: #12140f; color: #e8eadf; font: 15px/1.45 "Segoe UI", -apple-system, Helvetica, Arial, sans-serif; margin: 24px; }
+  h1 { font-size: 18px; }
+  .pass { color: #c8e27a; } .fail { color: #e07a5f; } .run { color: #e6c07b; }
+  pre { white-space: pre-wrap; background: #1c1f18; padding: 12px; border-radius: 8px; font-size: 12px; }
+  a { color: #8ec7b5; }
+</style>
+</head>
+<body>
+<h1>Ask the library: self-test</h1>
+<p>This page checks that the chat can search the Offline Library, answer with sources, refuse made-up sources,
+and say so when something is not in the library. It needs the kit to be running (START-OFFLINE-AI).
+It takes up to a few minutes on a slow computer.</p>
+<p id="overall" class="run">Running&hellip;</p>
+<ol id="steps"></ol>
+<pre id="result"></pre>
+<script src="kit-config.js"></script>
+<script src="ask-library.js"></script>
+<script>
+(function () {
+  "use strict";
+  var CFG = window.KIT_CONFIG || {};
+  var API = "http://127.0.0.1:" + (CFG.ollamaPort || 11435);
+  var LIB = "http://127.0.0.1:" + (CFG.libraryPort || 8090);
+  var params = {};
+  (location.hash.slice(1) + "&" + location.search.slice(1)).split("&").forEach(function (kv) {
+    if (!kv) return; var i = kv.indexOf("="); var k = i < 0 ? kv : kv.slice(0, i); var v = i < 0 ? "" : kv.slice(i + 1);
+    try { params[decodeURIComponent(k)] = decodeURIComponent(v.replace(/\+/g, " ")); } catch (e) { /* ignore */ }
+  });
+  var QUESTION = params.q || "How do I stop heavy bleeding from a cut?";
+  var NONSENSE = "zxqv flurbington glorpwhistle quarbleflix";
+  var PREFERRED = ["qwen3.5:9b", "qwen3:8b", "qwen3:14b", "gemma3:12b", "gemma3:4b", "phi4-mini", "llama3.2:3b", "medgemma:4b"];
+  var report = { started: new Date().toISOString(), page: location.protocol + "//" + location.host + location.pathname, question: QUESTION, steps: [] };
+  var stepsEl = document.getElementById("steps");
+
+  function step(name, ok, detail) {
+    report.steps.push({ name: name, ok: ok, detail: detail });
+    var li = document.createElement("li");
+    li.className = ok ? "pass" : "fail";
+    li.textContent = (ok ? "PASS  " : "FAIL  ") + name + (detail && detail.summary ? " - " + detail.summary : "");
+    stepsEl.appendChild(li);
+  }
+  function status(url) {
+    return fetch(url, { cache: "no-store" }).then(function (r) { return r.status; }, function (e) { return "error: " + e.message; });
+  }
+  function pickModel() {
+    if (params.model) return Promise.resolve(params.model);
+    return fetch(API + "/api/tags").then(function (r) { return r.json(); }).then(function (d) {
+      var names = (d.models || []).map(function (m) { return m.name; });
+      return PREFERRED.find(function (n) { return names.indexOf(n) !== -1; }) || names[0];
+    });
+  }
+  function done() {
+    var ok = report.steps.length > 0 && report.steps.every(function (s) { return s.ok; });
+    report.result = ok ? "PASS" : "FAIL";
+    report.finished = new Date().toISOString();
+    var o = document.getElementById("overall");
+    o.className = ok ? "pass" : "fail";
+    o.textContent = ok ? "All checks passed." : "Some checks failed (details below).";
+    document.title = "SELFTEST " + report.result;
+    document.getElementById("result").textContent = "SELFTEST-JSON-BEGIN\n" + JSON.stringify(report, null, 2) + "\nSELFTEST-JSON-END";
+    // Optional: send the result to a local test listener (127.0.0.1 only), used by automated tests.
+    if (params.report && /^http:\/\/(127\.0\.0\.1|localhost):\d+\/?/.test(params.report)) {
+      fetch(params.report, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain" }, body: JSON.stringify(report) }).catch(function () {});
+    }
+  }
+
+  var lib = new AskLibrary.Library(LIB);
+  var model;
+  lib.loadBooks().then(function (books) {
+    var searchable = books.filter(function (b) { return b.searchable; });
+    step("Library catalog", searchable.length > 0, { summary: books.length + " collection(s), " + searchable.length + " searchable", books: books });
+    return pickModel();
+  }).then(function (m) {
+    model = m;
+    report.model = m;
+    if (!m) throw new Error("no AI model installed");
+    // 1. A real question: answer with sources that open in the library.
+    var t0 = Date.now();
+    return AskLibrary.ask({ library: lib, ollamaBase: API, model: m, question: QUESTION });
+  }).then(function (res) {
+    var urls = (res.sources || []).map(function (s) { return s.url; });
+    return Promise.all(urls.map(status)).then(function (codes) {
+      var allLocal = urls.every(function (u) { return u.indexOf(LIB + "/content/") === 0; });
+      var all200 = codes.length > 0 && codes.every(function (c) { return c === 200; });
+      var citedOk = (res.cited || []).every(function (n) { return n >= 1 && n <= (res.sources || []).length; });
+      var ok = res.status === "answered" && urls.length > 0 && allLocal && all200 && citedOk && (res.cited || []).length > 0;
+      step("Answer with sources", ok, {
+        summary: res.status + ", " + urls.length + " source(s), cited " + JSON.stringify(res.cited || []) + ", HTTP " + codes.join("/"),
+        status: res.status, reason: res.reason, answer: res.answer, cited: res.cited, removed: res.removed,
+        sources: (res.sources || []).map(function (s, i) { return { n: s.n, title: s.title, book: s.book, url: s.url, http: codes[i] }; })
+      });
+    });
+  }).then(function () {
+    // 2. Nonsense: must say it is not in the library.
+    return AskLibrary.ask({ library: lib, ollamaBase: API, model: model, question: NONSENSE }).then(function (res) {
+      step("Nonsense question -> 'not in the library'", res.status === "not_found", { summary: res.status + (res.reason ? " (" + res.reason + ")" : ""), status: res.status, reason: res.reason });
+    });
+  }).then(function () {
+    // 3. Forged citation: add a made-up [n] and a made-up web link to a real AI answer; both must be removed.
+    var forgedN;
+    return AskLibrary.ask({
+      library: lib, question: QUESTION,
+      generate: function (messages, sources) {
+        forgedN = sources.length + 6;
+        return AskLibrary.ollamaChat(API, model, messages, null).then(function (txt) {
+          return txt + "\nAlso see [" + forgedN + "] and [1, " + (forgedN + 1) + "] and https://example.com/made-up-source.\nSources:\n[" + forgedN + "] Made-up Journal, 2021";
+        });
+      }
+    }).then(function (res) {
+      var a = res.answer || "";
+      var ok = res.status === "answered" &&
+               a.indexOf("[" + forgedN + "]") === -1 && a.indexOf("[" + (forgedN + 1) + "]") === -1 && a.indexOf("example.com") === -1 && a.indexOf("Made-up Journal") === -1 &&
+               (res.removed || []).indexOf(forgedN) !== -1 && (res.removed || []).indexOf(forgedN + 1) !== -1 &&
+               (res.cited || []).every(function (n) { return n >= 1 && n <= res.sources.length; });
+      step("Forged citation dropped", ok, { summary: "forged [" + forgedN + "], removed " + JSON.stringify(res.removed), status: res.status, removed: res.removed, cited: res.cited, answerTail: a.slice(-300) });
+    });
+  }).catch(function (e) {
+    step("Self-test could run", false, { summary: e.message });
+  }).then(done);
+})();
+</script>
+</body>
+</html>
