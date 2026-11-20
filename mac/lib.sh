@@ -20,6 +20,9 @@ WWW_DIR="$KIT/www"
 CONFIG_FILE="$KIT/kit-config-mac.txt"
 WIKI_PROGRESS="$LOG_DIR/wikipedia-progress.json"
 WIKI_STATUS_JS="$WWW_DIR/wiki-status.js"
+EXTRA_CATALOG_FILE="$KIT/catalog/extra-libraries.txt"
+RELEASES_API="https://api.github.com/repos/wallenberg4001-del/offline-ai-kit/releases/latest"
+KIT_VERSION="$(head -1 "$KIT/VERSION" 2>/dev/null | tr -d '\r[:space:]')"; [ -n "$KIT_VERSION" ] || KIT_VERSION=0.0.0
 
 setting() { # setting <KEY> <default>
   local v=""
@@ -34,12 +37,15 @@ set_setting() { # set_setting <KEY> <value>
   printf '%s=%s\n' "$1" "$2" >> "$tmp"
   mv -f "$tmp" "$SETTINGS_FILE"
 }
-is_yes() { case "$1" in [Yy]|[Yy][Ee][Ss]|[Tt][Rr][Uu][Ee]|1) return 0 ;; esac; return 1; }
+is_yes() { case "$1" in [Yy]|[Yy][Ee][Ss]|[Tt][Rr][Uu][Ee]|1|[Oo][Nn]) return 0 ;; esac; return 1; }
 load_settings() {
   USE_SYSTEM_OLLAMA=no; is_yes "$(setting USE_SYSTEM_OLLAMA no)" && USE_SYSTEM_OLLAMA=yes
   SKIP_WIKIPEDIA=no;    is_yes "$(setting SKIP_WIKIPEDIA no)" && SKIP_WIKIPEDIA=yes
   LIBRARY_PORT="$(setting LIBRARY_PORT 8090)"
   if [ "$USE_SYSTEM_OLLAMA" = yes ]; then OLLAMA_PORT="$(setting OLLAMA_PORT 11434)"; else OLLAMA_PORT="$(setting OLLAMA_PORT 11435)"; fi
+  CHAT_PORT="$(setting CHAT_PORT 8091)"
+  # Share on Wi-Fi (off by default). The AI server (Ollama) always stays on 127.0.0.1 either way.
+  SHARE_ON_WIFI=no; is_yes "$(setting SHARE_ON_WIFI 0)" && SHARE_ON_WIFI=yes
 }
 load_settings                         # kit Ollama defaults to 11435, never the normal 11434
 
@@ -197,7 +203,12 @@ pick_profile_for_disk() { # pick_profile_for_disk <preferred> <free GB> -> "prof
   return 1
 }
 
-write_chat_config() { printf 'window.KIT_CONFIG = { ollamaPort: %s, libraryPort: %s };\n' "$OLLAMA_PORT" "$LIBRARY_PORT" > "$WWW_DIR/kit-config.js" 2>/dev/null || true; }
+write_chat_config() {
+  local share=false lan="" ip
+  if [ "$SHARE_ON_WIFI" = yes ]; then share=true; ip="$(lan_ip)"; [ -n "$ip" ] && lan="http://$ip:$CHAT_PORT/"; fi
+  printf 'window.KIT_CONFIG = { ollamaPort: %s, libraryPort: %s, chatPort: %s, shareOnWifi: %s, lanUrl: "%s", version: "%s" };\n' \
+    "$OLLAMA_PORT" "$LIBRARY_PORT" "$CHAT_PORT" "$share" "$lan" "$KIT_VERSION" > "$WWW_DIR/kit-config.js" 2>/dev/null || true
+}
 
 make_desktop_shortcut() {
   local d="$HOME/Desktop" f
@@ -389,7 +400,7 @@ kit_pid() { # prints the pid if that kit process is running (and really is ours)
   p="$(head -1 "$pf" 2>/dev/null)"
   [ -n "$p" ] && kill -0 "$p" 2>/dev/null || return 1
   comm="$(ps -p "$p" -o command= 2>/dev/null)"
-  case "$1" in kiwix) want=kiwix-serve ;; ollama) want=ollama ;; *) want=wiki-download ;; esac
+  case "$1" in kiwix) want=kiwix-serve ;; ollama) want=ollama ;; chat-server) want=serve-chat ;; add-libraries) want=add-libraries ;; *) want=wiki-download ;; esac
   case "$comm" in *"$want"*) printf '%s\n' "$p"; return 0 ;; esac
   return 1
 }
@@ -446,8 +457,9 @@ start_kiwix() { # (re)starts kiwix-serve with every verified ZIM
   if [ "${#zims[@]}" -eq 0 ]; then warn "  No verified library files yet - the library will be empty."; return 1; fi
   for i in $(seq 1 10); do port_up "$LIBRARY_PORT" || break; sleep 0.5; done
   if port_up "$LIBRARY_PORT"; then err "  Port $LIBRARY_PORT is used by another program; the library cannot start."; return 1; fi
+  local addr=127.0.0.1; [ "$SHARE_ON_WIFI" = yes ] && addr=0.0.0.0
   # shellcheck disable=SC2086  # see start_ollama
-  nohup $ARCH_CMD "$bin" --address=127.0.0.1 --port="$LIBRARY_PORT" "${zims[@]}" >> "$LOG_DIR/kiwix-mac.log" 2>&1 < /dev/null &
+  nohup $ARCH_CMD "$bin" --address="$addr" --port="$LIBRARY_PORT" "${zims[@]}" >> "$LOG_DIR/kiwix-mac.log" 2>&1 < /dev/null &
   printf '%s\n' "$!" > "$(pid_file kiwix)"
   for i in $(seq 1 30); do
     if port_up "$LIBRARY_PORT"; then say "  Library is serving ${#zims[@]} collection(s)."; return 0; fi
@@ -455,6 +467,157 @@ start_kiwix() { # (re)starts kiwix-serve with every verified ZIM
   done
   warn "  The library did not answer yet. See logs/kiwix-mac.log"
   return 1
+}
+
+# ---------- Share on Wi-Fi ----------
+lan_ip() { # the address phones on the same Wi-Fi use to reach this Mac (IPv4), or nothing
+  local ifc="" ip=""
+  ifc="$(route -n get default 2>/dev/null | awk '/interface:/ { print $2 }')"
+  [ -n "$ifc" ] && ip="$(ipconfig getifaddr "$ifc" 2>/dev/null)"
+  if [ -z "$ip" ]; then for ifc in en0 en1 en2 en3 en4 en5 en6 en7 en8; do ip="$(ipconfig getifaddr "$ifc" 2>/dev/null)" && [ -n "$ip" ] && break; done; fi
+  if [ -z "$ip" ] && command -v hostname >/dev/null 2>&1 && [ "$(uname -s)" != Darwin ]; then ip="$(hostname -I 2>/dev/null | awk '{print $1}')"; fi
+  case "$ip" in 127.*|169.254.*|"") return 1 ;; esac
+  printf '%s\n' "$ip"
+}
+wifi_warning() {
+  warn "  Only use this at home on Wi-Fi you trust - never on public Wi-Fi (cafes, hotels, airports)."
+  warn "  Anyone on the same Wi-Fi can open the chat and the library. The AI server itself stays private."
+}
+show_share_status() {
+  local ip
+  if [ "$SHARE_ON_WIFI" = yes ]; then
+    ok "  Share on Wi-Fi: ON"
+    if ip="$(lan_ip)"; then ok "    Phones and tablets on the same Wi-Fi open:  http://$ip:$CHAT_PORT/"; say "    (the chat page also shows a QR code to scan)"
+    else warn "    No home network found right now (is Wi-Fi connected?)."; fi
+    say "    If a phone cannot connect and the Mac asks whether kiwix-serve or perl may accept incoming"
+    say "    connections, click Allow (System Settings > Network > Firewall)."
+    wifi_warning
+  else
+    say "  Share on Wi-Fi: off (only this Mac can use the kit)"
+  fi
+}
+chat_server_cmd() { # prints which program runs the chat page server: perl (built into macOS) or python3
+  if command -v perl >/dev/null 2>&1 && perl -MIO::Socket::INET -e 1 >/dev/null 2>&1; then echo perl; return 0; fi
+  # Do not call /usr/bin/python3 on a Mac without the developer tools: it pops up an install dialog.
+  if command -v python3 >/dev/null 2>&1; then
+    if [ "$(command -v python3)" != /usr/bin/python3 ] || [ "$(uname -s)" != Darwin ] || xcode-select -p >/dev/null 2>&1; then echo python3; return 0; fi
+  fi
+  return 1
+}
+start_chat_server() { # the chat page over http on the home network (only used when Share on Wi-Fi is on)
+  local how i bind=127.0.0.1
+  [ "$SHARE_ON_WIFI" = yes ] && bind=0.0.0.0
+  if kit_pid chat-server >/dev/null; then say "  Chat page server already running."; return 0; fi
+  if port_up "$CHAT_PORT"; then warn "  Port $CHAT_PORT is used by another program; phones cannot open the chat page."; return 1; fi
+  how="$(chat_server_cmd)" || { warn "  Neither perl nor python3 is available, so phones cannot open the chat page (the library still works)."; return 1; }
+  if [ "$how" = perl ]; then
+    nohup perl "$MAC_DIR/serve-chat.pl" --bind "$bind" --port "$CHAT_PORT" --www "$WWW_DIR" --logs "$LOG_DIR" --ollama-port "$OLLAMA_PORT" >> "$LOG_DIR/chat-server-mac.log" 2>&1 < /dev/null &
+  else
+    nohup python3 "$MAC_DIR/serve-chat.py" --bind "$bind" --port "$CHAT_PORT" --www "$WWW_DIR" --logs "$LOG_DIR" --ollama-port "$OLLAMA_PORT" >> "$LOG_DIR/chat-server-mac.log" 2>&1 < /dev/null &
+  fi
+  printf '%s\n' "$!" > "$(pid_file chat-server)"
+  for i in $(seq 1 30); do port_up "$CHAT_PORT" && return 0; sleep 0.3; done
+  warn "  The chat page server did not answer yet. See logs/chat-server-mac.log"
+  return 1
+}
+set_share_on_wifi() { # set_share_on_wifi yes|no [apply]
+  if [ "$1" = yes ]; then set_setting SHARE_ON_WIFI 1; else set_setting SHARE_ON_WIFI 0; fi
+  load_settings
+  [ "${2:-}" = apply ] || return 0
+  if ! kit_pid kiwix >/dev/null && ! kit_pid chat-server >/dev/null; then say "  The kit is not running; this applies the next time you start it."; return 0; fi
+  say "  Restarting the library and chat page..."
+  write_chat_config
+  start_kiwix || true
+  stop_kit chat-server
+  [ "$SHARE_ON_WIFI" = yes ] && { start_chat_server || true; }
+  return 0
+}
+
+# ---------- Extra Libraries (catalog/extra-libraries.txt) ----------
+extra_catalog() { [ -f "$EXTRA_CATALOG_FILE" ] && tr -d '\r' < "$EXTRA_CATALOG_FILE" | grep -vE '^[[:space:]]*(#|$)'; }
+extra_field() { extra_catalog | awk -F'|' -v id="$1" -v f="$2" '$1 == id { print $f }'; }
+extra_installed() { # extra_installed <id> -> prints the verified file name
+  local prefix f b
+  prefix="$(extra_field "$1" 3)"; [ -n "$prefix" ] || return 1
+  for f in "$VERIFIED_DIR/${prefix}"_*.zim; do
+    [ -e "$f" ] || continue
+    b="$(basename "$f")"
+    case "${b#"${prefix}"_}" in [0-9][0-9][0-9][0-9]-[0-9][0-9].zim) [ -f "$LIBRARY/$b" ] && { printf '%s\n' "$b"; return 0; } ;; esac
+  done
+  return 1
+}
+size_label() { awk -v g="$1" 'BEGIN { if (g < 1) printf "%.0f MB", g * 1000; else printf "%.1f GB", g }'; }
+show_extra_catalog() {
+  local n=0 id gb about mark
+  while IFS='|' read -r id _ _ gb _ about; do
+    n=$((n + 1)); mark="   "; extra_installed "$id" >/dev/null && mark="[x]"
+    printf '  %2d) %s %-22s %9s  %s\n' "$n" "$mark" "$id" "$(size_label "$gb")" "$about"
+  done <<EOF_CAT
+$(extra_catalog)
+EOF_CAT
+  say '  [x] = already added. "all" means everything except gutenberg-all (206 GB).'
+}
+resolve_extra_ids() { # "1,3" / "se-diy wiktionary" / "all" -> ids, one per line (catalog order of first mention)
+  local tok out="" id total
+  total="$(extra_catalog | wc -l | tr -d ' ')"
+  for tok in $(printf '%s' "$1" | tr ',' ' ' | tr 'A-Z' 'a-z'); do
+    if [ "$tok" = all ]; then extra_catalog | awk -F'|' '$1 != "gutenberg-all" { print $1 }'; return 0; fi
+    case "$tok" in
+      *[!0-9]*) id="$(extra_field "$tok" 1)"; [ -n "$id" ] || { warn "  (Unknown library '$tok' - skipped)" >&2; continue; } ;;
+      *) if [ "$tok" -ge 1 ] && [ "$tok" -le "$total" ]; then id="$(extra_catalog | sed -n "${tok}p" | cut -d'|' -f1)"; else warn "  (No number $tok in the list - skipped)" >&2; continue; fi ;;
+    esac
+    case " $out " in *" $id "*) ;; *) out="$out $id" ;; esac
+  done
+  for id in $out; do printf '%s\n' "$id"; done
+}
+extra_gb() { # total GB still to download for the given ids (already added ones count 0)
+  local id total=0 g
+  for id in $1; do extra_installed "$id" >/dev/null && continue; g="$(extra_field "$id" 4)"; total="$(awk -v a="$total" -v b="${g:-0}" 'BEGIN { printf "%.2f", a + b }')"; done
+  printf '%s\n' "$total"
+}
+install_extra() { # install_extra <id>: fastest mirror + resume + SHA-256 + VERIFIED marker
+  local id="$1" dir prefix about file have url size part free
+  if have="$(extra_installed "$id")"; then ok "  Already added: $(extra_field "$id" 6) ($have)"; return 0; fi
+  dir="$(extra_field "$id" 2)"; prefix="$(extra_field "$id" 3)"; about="$(extra_field "$id" 6)"
+  file="$(resolve_latest_zim "$dir" "$prefix")"
+  [ -n "$file" ] || { err "  Could not find $prefix on download.kiwix.org (no internet?)"; return 1; }
+  url="$KIWIX_BASE/$dir/$file"; size="$(remote_size "$url")"; part="$(file_size "$LIBRARY/$file.part")"
+  free="$(free_bytes "$LIBRARY")"
+  say "  - $about: $file ($(gb "$size"))"
+  if [ "$size" -gt 0 ] && [ "$free" -lt $((size - part + 2000000000)) ]; then
+    err "    Not enough free space: needs $(gb $((size - part))), only $(gb "$free") free on this drive. Skipped."; return 1
+  fi
+  get_zim "$dir" "$file" no
+}
+
+# ---------- Check for updates (only when asked; needs internet; never downloads or changes anything) ----------
+version_cmp() { # version_cmp A B -> prints -1, 0 or 1 (accepts v1.2.3 and 1.2.3-beta; pre-release sorts first)
+  awk -v a="$1" -v b="$2" 'function parse(v, n, pre,   p, i, k) { sub(/^[vV]/, "", v); pre[1] = ""; i = index(v, "-"); if (i) { pre[1] = substr(v, i + 1); v = substr(v, 1, i - 1) }
+      k = split(v, p, "."); for (i = 1; i <= 3; i++) { n[i] = (i <= k) ? p[i] + 0 : 0 } }
+    BEGIN { parse(a, x, xp); parse(b, y, yp)
+      for (i = 1; i <= 3; i++) { if (x[i] < y[i]) { print -1; exit } if (x[i] > y[i]) { print 1; exit } }
+      if (xp[1] == yp[1]) { print 0; exit } if (xp[1] == "") { print 1; exit } if (yp[1] == "") { print -1; exit }
+      print (xp[1] < yp[1]) ? -1 : 1 }'
+}
+update_check() {
+  local api="${OFFLINE_AI_RELEASES_API:-$RELEASES_API}" json latest page zip
+  say "  This kit: version $KIT_VERSION. Asking GitHub for the newest version..."
+  if ! json="$(curl -sS -L --fail --connect-timeout 8 --max-time 20 -H 'Accept: application/vnd.github+json' -H 'User-Agent: offline-ai-kit' "$api" 2>/dev/null)" || [ -z "$json" ]; then
+    warn "  You appear to be offline (or GitHub could not be reached) - that's fine, the kit doesn't need internet to run."
+    say "UPDATE CHECK: OFFLINE"; return 0
+  fi
+  json="$(printf '%s' "$json" | tr -d '\n')"
+  latest="$(printf '%s' "$json" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"; latest="${latest#[vV]}"
+  if [ -z "$latest" ]; then warn "  GitHub sent an answer the kit could not read. Try again later."; say "UPDATE CHECK: ERROR"; return 0; fi
+  if [ "$(version_cmp "$KIT_VERSION" "$latest")" -ge 0 ]; then ok "  You're on the latest version, v$KIT_VERSION."; say "UPDATE CHECK: UP TO DATE (latest v$latest)"; return 0; fi
+  page="$(printf '%s' "$json" | grep -oE '"html_url"[[:space:]]*:[[:space:]]*"https://github.com/[^"]*/releases/tag/[^"]*"' | head -1 | sed 's/.*"\(https[^"]*\)"/\1/')"
+  zip="$(printf '%s' "$json" | grep -oE '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*Offline-AI-Kit-[^"]*\.zip"' | head -1 | sed 's/.*"\(https[^"]*\)"/\1/')"
+  warn "  A newer version is available: v$latest (you have v$KIT_VERSION)."
+  say  "  What's new:   ${page:-https://github.com/wallenberg4001-del/offline-ai-kit/releases/latest}"
+  [ -n "$zip" ] && say "  Download:     $zip"
+  say  "  Nothing was downloaded or changed. To update: download the ZIP, unzip it, and copy your"
+  say  "  \"library\", \"ollama-models\" and \"runtime\" folders (and kit-settings.ini) into the new folder."
+  say  "UPDATE CHECK: UPDATE AVAILABLE v$latest"
 }
 
 open_url() { if command -v open >/dev/null 2>&1; then open "$1" 2>/dev/null || true; else say "  Open: $1"; fi; }

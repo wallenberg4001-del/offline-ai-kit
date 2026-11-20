@@ -54,6 +54,13 @@ $LibraryPort = [int](Get-Setting 'LIBRARY_PORT' '8090')
 $defaultOllamaPort = '11435'; if ($UseSystemOllama) { $defaultOllamaPort = '11434' }
 $OllamaPort  = [int](Get-Setting 'OLLAMA_PORT' $defaultOllamaPort)
 $ChatPort    = [int](Get-Setting 'CHAT_PORT' '8091')
+# Share on Wi-Fi (off by default): library + chat page listen on the home network so phones can use them.
+# The AI server (Ollama) ALWAYS stays on 127.0.0.1; phones reach it only through the chat page's /ollama/ proxy.
+$ShareOnWifi = ((Get-Setting 'SHARE_ON_WIFI' '0') -match '^(?i)(yes|true|1|on)$')
+$KitVersion = '0.0.0'
+try { $KitVersion = ((Get-Content -LiteralPath (Join-Path $Kit 'VERSION') -ErrorAction Stop | Select-Object -First 1).Trim()) } catch {}
+$ExtraCatalogFile = Join-Path $Kit 'catalog\extra-libraries.txt'
+$ReleasesApi = 'https://api.github.com/repos/wallenberg4001-del/offline-ai-kit/releases/latest'
 
 $KiwixBase   = 'https://download.kiwix.org'
 
@@ -474,7 +481,8 @@ function Start-KitKiwix {
   if ($zims.Count -eq 0) { Write-Host "  No verified library files yet - the library will be empty." -ForegroundColor Yellow; return $false }
   for ($i = 0; $i -lt 10 -and (Test-Port $LibraryPort); $i++) { Start-Sleep -Milliseconds 500 }
   if (Test-Port $LibraryPort) { Write-Host "  Port $LibraryPort is used by another program; the library cannot start." -ForegroundColor Red; return $false }
-  $argStr = "--address=127.0.0.1 --port=$LibraryPort " + (($zims | ForEach-Object { '"' + $_ + '"' }) -join ' ')
+  $addr = '127.0.0.1'; if ($ShareOnWifi) { $addr = '0.0.0.0' }
+  $argStr = "--address=$addr --port=$LibraryPort " + (($zims | ForEach-Object { '"' + $_ + '"' }) -join ' ')
   $p = Start-Process -FilePath $exe -ArgumentList $argStr -WindowStyle Hidden -PassThru `
        -RedirectStandardOutput (Join-Path $LogDir 'kiwix.out.log') -RedirectStandardError (Join-Path $LogDir 'kiwix.log')
   Set-Content -LiteralPath (Get-PidFile 'kiwix') -Value $p.Id
@@ -490,7 +498,9 @@ function Get-KitConfig {
 
 function Write-ChatConfig {
   # Tells the chat page which ports to use (read by www/chat.html).
-  $js = "window.KIT_CONFIG = { ollamaPort: $OllamaPort, libraryPort: $LibraryPort };"
+  $share = 'false'; $lan = ''
+  if ($ShareOnWifi) { $share = 'true'; $ip = Get-LanIp; if ($ip) { $lan = "http://${ip}:$ChatPort/" } }
+  $js = "window.KIT_CONFIG = { ollamaPort: $OllamaPort, libraryPort: $LibraryPort, chatPort: $ChatPort, shareOnWifi: $share, lanUrl: `"$lan`", version: `"$KitVersion`" };"
   try { Set-Content -LiteralPath (Join-Path $WwwDir 'kit-config.js') -Value $js -Encoding ASCII } catch {}
 }
 
@@ -506,4 +516,194 @@ function New-DesktopShortcut {
     $lnk.Save()
     Write-Host "  Put an 'Offline AI' shortcut on the Desktop." -ForegroundColor Green
   } catch { Write-Host '  Could not create the Desktop shortcut (not a problem; use START-OFFLINE-AI.bat).' -ForegroundColor Yellow }
+}
+
+# ---------- Share on Wi-Fi ----------
+function Get-LanIp {
+  # The address phones on the same Wi-Fi use to reach this computer (IPv4), or '' if none.
+  # 1) Ask Windows which local address it would use for the default route (no packet is sent).
+  try {
+    $s = New-Object System.Net.Sockets.Socket([Net.Sockets.AddressFamily]::InterNetwork, [Net.Sockets.SocketType]::Dgram, [Net.Sockets.ProtocolType]::Udp)
+    try { $s.Connect('8.8.8.8', 53); $ip = $s.LocalEndPoint.Address.ToString() } finally { $s.Close() }
+    if ($ip -and $ip -notmatch '^(127\.|169\.254\.|0\.)') { return $ip }
+  } catch {}
+  # 2) No internet route (outage, router still on): pick a private address on an adapter that is up.
+  try {
+    $cands = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop | Where-Object {
+      $_.IPAddress -match '^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)' -and $_.InterfaceAlias -notmatch 'vEthernet|WSL|Hyper-V|VirtualBox|VMware|Tailscale|Loopback' }
+    $c = $cands | Sort-Object { if ($_.IPAddress -like '192.168.*') { 0 } else { 1 } } | Select-Object -First 1
+    if ($c) { return $c.IPAddress }
+  } catch {}
+  return ''
+}
+
+function Get-ShareUrls {
+  $ip = Get-LanIp
+  if (-not $ip) { return $null }
+  return [pscustomobject]@{ Ip = $ip; Chat = "http://${ip}:$ChatPort/"; Library = "http://${ip}:$LibraryPort/" }
+}
+
+function Write-WifiWarning {
+  Write-Host '  Only use this at home on Wi-Fi you trust - never on public Wi-Fi (cafes, hotels, airports).' -ForegroundColor Yellow
+  Write-Host '  Anyone on the same Wi-Fi can open the chat and the library. The AI server itself stays private.' -ForegroundColor Yellow
+}
+
+function Start-ChatServer {
+  # Starts the chat page web server (scripts\serve-chat.ps1): 127.0.0.1 only, or the home network when sharing.
+  if (Test-Port $ChatPort) {
+    if (Get-KitProcess 'chat-server') { Write-Host '  Chat page already running.'; return $true }
+    Write-Host "  Port $ChatPort is used by another program; the chat page will open as a file instead." -ForegroundColor Yellow
+    return $false
+  }
+  $ps = Join-Path $PSHOME 'powershell.exe'
+  if (-not (Test-Path -LiteralPath $ps)) { $ps = (Get-Process -Id $PID).Path }
+  $srv = Join-Path $PSScriptRoot 'serve-chat.ps1'
+  $bind = 'local'; if ($ShareOnWifi) { $bind = 'any' }
+  $p = Start-Process -FilePath $ps -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',('"' + $srv + '"'),'-Bind',$bind) -WindowStyle Hidden -PassThru
+  Set-Content -LiteralPath (Get-PidFile 'chat-server') -Value $p.Id
+  for ($i = 0; $i -lt 30 -and -not (Test-Port $ChatPort); $i++) { Start-Sleep -Milliseconds 300 }
+  return (Test-Port $ChatPort)
+}
+
+function Set-ShareOnWifi([bool]$On, [switch]$Apply) {
+  # Saves SHARE_ON_WIFI in kit-settings.ini; with -Apply, restarts the library and chat page if the kit is running.
+  if ($On) { Set-KitSetting 'SHARE_ON_WIFI' '1' } else { Set-KitSetting 'SHARE_ON_WIFI' '0' }
+  $script:ShareOnWifi = $On
+  if (-not $Apply) { return }
+  $running = (Get-KitProcess 'kiwix') -or (Get-KitProcess 'chat-server')
+  if (-not $running) { Write-Host '  The kit is not running; this applies the next time you start it.'; return }
+  Write-Host '  Restarting the library and chat page...'
+  Write-ChatConfig
+  Start-KitKiwix | Out-Null
+  Stop-KitProcess 'chat-server'
+  for ($i = 0; $i -lt 20 -and (Test-Port $ChatPort); $i++) { Start-Sleep -Milliseconds 250 }
+  Start-ChatServer | Out-Null
+}
+
+function Show-ShareStatus {
+  if ($ShareOnWifi) {
+    $u = Get-ShareUrls
+    Write-Host '  Share on Wi-Fi: ON' -ForegroundColor Green
+    if ($u) { Write-Host "    Phones and tablets on the same Wi-Fi open:  $($u.Chat)" -ForegroundColor Green; Write-Host '    (the chat page also shows a QR code to scan)' }
+    else { Write-Host '    No home network found right now (is Wi-Fi or Ethernet connected?).' -ForegroundColor Yellow }
+    Write-Host '    If a phone cannot connect: when Windows asks, allow "Windows PowerShell" and "kiwix-serve" on Private networks,'
+    Write-Host '    and make sure your home Wi-Fi is set to "Private" (Settings > Network & internet > your network).'
+    Write-WifiWarning
+  } else {
+    Write-Host '  Share on Wi-Fi: off (only this computer can use the kit)'
+  }
+}
+
+# ---------- Extra Libraries (catalog\extra-libraries.txt) ----------
+function Get-ExtraCatalog {
+  $list = @()
+  if (-not (Test-Path -LiteralPath $ExtraCatalogFile)) { return $list }
+  foreach ($line in Get-Content -LiteralPath $ExtraCatalogFile) {
+    $t = $line.Trim(); if (-not $t -or $t.StartsWith('#')) { continue }
+    $f = $t.Split('|'); if ($f.Count -lt 6) { continue }
+    $list += [pscustomobject]@{ Id=$f[0].Trim(); Dir=$f[1].Trim(); Prefix=$f[2].Trim(); GB=[double]::Parse($f[3].Trim(), [Globalization.CultureInfo]::InvariantCulture); Group=$f[4].Trim(); About=$f[5].Trim() }
+  }
+  return $list
+}
+
+function Get-ExtraInstalled($Entry) {
+  # Returns the verified file name for this collection (any edition), or $null.
+  if (-not (Test-Path -LiteralPath $VerifiedDir)) { return $null }
+  $re = '^' + [regex]::Escape($Entry.Prefix) + '_\d{4}-\d{2}\.zim$'
+  $m = Get-ChildItem -LiteralPath $VerifiedDir -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -match $re -and (Test-Path -LiteralPath (Join-Path $Library $_.Name)) } | Select-Object -First 1
+  if ($m) { return $m.Name }
+  return $null
+}
+
+function Format-Size([double]$GB) { if ($GB -lt 1) { return ('{0:N0} MB' -f ($GB * 1000)) }; return ('{0:N1} GB' -f $GB) }
+
+function Resolve-ExtraIds([string]$Text, $Catalog) {
+  # "1,3" / "se-diy,wiktionary" / "all" / "" -> matching catalog entries (numbers follow the list order).
+  $out = @()
+  if (-not $Text) { return $out }
+  foreach ($tok in ($Text -split '[,\s]+')) {
+    $t = $tok.Trim().ToLower(); if (-not $t) { continue }
+    if ($t -eq 'all') { return @($Catalog | Where-Object { $_.Id -ne 'gutenberg-all' }) }
+    $n = 0
+    if ([int]::TryParse($t, [ref]$n)) { if ($n -ge 1 -and $n -le $Catalog.Count) { $out += $Catalog[$n - 1] } else { Write-Host "  (No number $t in the list - skipped)" -ForegroundColor Yellow } }
+    else { $e = $Catalog | Where-Object { $_.Id -eq $t } | Select-Object -First 1; if ($e) { $out += $e } else { Write-Host "  (Unknown library '$t' - skipped)" -ForegroundColor Yellow } }
+  }
+  $seen = @{}; $uniq = @()
+  foreach ($e in $out) { if (-not $seen.ContainsKey($e.Id)) { $seen[$e.Id] = 1; $uniq += $e } }
+  return $uniq
+}
+
+function Show-ExtraCatalog($Catalog) {
+  $i = 0
+  foreach ($e in $Catalog) {
+    $i++
+    $mark = '   '; if (Get-ExtraInstalled $e) { $mark = '[x]' }
+    Write-Host ('  {0,2}) {1} {2,-22} {3,9}  {4}' -f $i, $mark, $e.Id, (Format-Size $e.GB), $e.About)
+  }
+  Write-Host '  [x] = already added. "all" means everything except gutenberg-all (206 GB).'
+}
+
+function Install-ExtraLibrary($Entry) {
+  # Download (fastest mirror, resume) + SHA-256 check + VERIFIED marker. Returns $true when ready.
+  $have = Get-ExtraInstalled $Entry
+  if ($have) { Write-Host "  Already added: $($Entry.About) ($have)" -ForegroundColor Green; return $true }
+  $z = Resolve-LatestZim ([pscustomobject]@{ Id=$Entry.Id; Dir=$Entry.Dir; Prefix=$Entry.Prefix; About=$Entry.About })
+  $size = Get-RemoteSize $z.Url
+  $already = [int64]0
+  if (Test-Path -LiteralPath (Join-Path $Library "$($z.File).part")) { $already = (Get-Item -LiteralPath (Join-Path $Library "$($z.File).part")).Length }
+  $free = Get-FreeBytes $Library
+  Write-Host ("  - {0}: {1} ({2})" -f $Entry.About, $z.File, (Format-GB $size))
+  if ($size -gt 0 -and $free -lt ($size - $already + [int64]2e9)) {
+    Write-Host ("    Not enough free space: needs {0}, only {1} free on this drive. Skipped." -f (Format-GB ($size - $already)), (Format-GB $free)) -ForegroundColor Red
+    return $false
+  }
+  return (Get-Zim -Z $z)
+}
+
+# ---------- Check for updates (only when asked; needs internet; never downloads or changes anything) ----------
+function Compare-KitVersion([string]$A, [string]$B) {
+  # -1 if A < B, 0 if equal, 1 if A > B. Accepts "v1.2.3" and "1.2.3-beta" (a pre-release sorts before the release).
+  function Split-V([string]$v) {
+    $v = $v.Trim().TrimStart('v','V'); $pre = ''
+    $i = $v.IndexOf('-'); if ($i -ge 0) { $pre = $v.Substring($i + 1); $v = $v.Substring(0, $i) }
+    $n = @(0,0,0); $p = $v.Split('.')
+    for ($k = 0; $k -lt 3 -and $k -lt $p.Count; $k++) { $x = 0; [void][int]::TryParse(($p[$k] -replace '[^0-9]',''), [ref]$x); $n[$k] = $x }
+    return @{ N = $n; Pre = $pre }
+  }
+  $va = Split-V $A; $vb = Split-V $B
+  for ($k = 0; $k -lt 3; $k++) { if ($va.N[$k] -lt $vb.N[$k]) { return -1 }; if ($va.N[$k] -gt $vb.N[$k]) { return 1 } }
+  if ($va.Pre -eq $vb.Pre) { return 0 }
+  if (-not $va.Pre) { return 1 }; if (-not $vb.Pre) { return -1 }
+  $c = [string]::CompareOrdinal($va.Pre, $vb.Pre)
+  if ($c -lt 0) { return -1 }; if ($c -gt 0) { return 1 }; return 0
+}
+
+function Invoke-UpdateCheck {
+  $api = $ReleasesApi; if ($env:OFFLINE_AI_RELEASES_API) { $api = $env:OFFLINE_AI_RELEASES_API }
+  Write-Host "  This kit: version $KitVersion. Asking GitHub for the newest version..."
+  $curl = Get-CurlExe
+  $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  $out = & $curl -sS -L --fail --connect-timeout 8 --max-time 20 -H 'Accept: application/vnd.github+json' -H 'User-Agent: offline-ai-kit' $api 2>$null
+  $code = $LASTEXITCODE; $ErrorActionPreference = $eap
+  if ($code -ne 0 -or -not $out) {
+    Write-Host "  You appear to be offline (or GitHub could not be reached) - that's fine, the kit doesn't need internet to run." -ForegroundColor Yellow
+    Write-Host 'UPDATE CHECK: OFFLINE'
+    return 'offline'
+  }
+  try { $rel = ($out -join "`n") | ConvertFrom-Json } catch { Write-Host '  GitHub sent an answer the kit could not read. Try again later.' -ForegroundColor Yellow; Write-Host 'UPDATE CHECK: ERROR'; return 'error' }
+  $latest = "$($rel.tag_name)".TrimStart('v','V')
+  if ((Compare-KitVersion $KitVersion $latest) -ge 0) {
+    Write-Host "  You're on the latest version, v$KitVersion." -ForegroundColor Green
+    Write-Host "UPDATE CHECK: UP TO DATE (latest v$latest)"
+    return 'current'
+  }
+  $zip = ($rel.assets | Where-Object { $_.name -like 'Offline-AI-Kit-*.zip' } | Select-Object -First 1).browser_download_url
+  if (-not $zip) { $zip = $rel.zipball_url }
+  Write-Host "  A newer version is available: v$latest (you have v$KitVersion)." -ForegroundColor Yellow
+  Write-Host "  What's new:   $($rel.html_url)"
+  Write-Host "  Download:     $zip"
+  Write-Host '  Nothing was downloaded or changed. To update: download the ZIP, unzip it, and copy your'
+  Write-Host '  "library", "ollama-models" and "runtime" folders (and kit-settings.ini) into the new folder.'
+  Write-Host "UPDATE CHECK: UPDATE AVAILABLE v$latest"
+  return 'update'
 }

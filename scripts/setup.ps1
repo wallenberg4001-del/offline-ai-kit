@@ -1,7 +1,7 @@
 # One-time setup for the Offline AI Kit (needs internet). Safe to run again:
 # finished downloads are skipped, half-finished ones resume.
 #   EASY-INSTALL (Windows).bat  -> setup.ps1 -Easy   (no questions; picks everything from the hardware)
-#   SETUP.bat         -> setup.ps1         (menus)
+#   SETUP.bat         -> setup.ps1         (Setup Wizard: choose your features step by step)
 #   Power users: see ADVANCED.md for every option below and kit-settings.ini.
 param(
   [switch]$Easy,
@@ -15,8 +15,10 @@ param(
   [switch]$UseSystemOllama,
   [switch]$NoStart,
   [switch]$Test,
-  [switch]$DetectOnly,            # just show the hardware check and chosen profile, then exit                  # quick test install (see ADVANCED.md "Test mode")
-  [switch]$Yes
+  [switch]$DetectOnly,            # just show the hardware check and chosen profile, then exit
+  [switch]$Yes,
+  [switch]$ShareWifi,              # turn on Share on Wi-Fi (phones/tablets on the home network)
+  [string]$ExtraLibraries = ''     # comma list of Extra Library ids or numbers (catalog\extra-libraries.txt), or 'all'
 )
 . (Join-Path $PSScriptRoot 'common.ps1')
 $ErrorActionPreference = 'Stop'
@@ -25,7 +27,11 @@ if ($Easy) { $Yes = $true }
 
 function Ask([string]$Question, [string]$Default) {
   if ($Yes) { return $Default }
-  $a = Read-Host "$Question [$Default]"
+  if ([Console]::IsInputRedirected) {
+    # Scripted answers (one per line on standard input); end of input = the suggested answer.
+    $a = [Console]::In.ReadLine()
+    Write-Host "$Question [$Default] $a"
+  } else { $a = Read-Host "$Question [$Default]" }
   if ([string]::IsNullOrWhiteSpace($a)) { return $Default }
   return $a.Trim()
 }
@@ -56,14 +62,14 @@ $target = [System.IO.Path]::GetFullPath($target.Trim().Trim('"'))
 if ($target.TrimEnd('\','/') -ne $Kit.TrimEnd('\','/')) {
   Write-Host "Copying the kit files to $target ..."
   New-Item -ItemType Directory -Force -Path $target | Out-Null
-  foreach ($item in @('scripts','www','mac','SETUP.bat','EASY-INSTALL (Windows).bat','START-OFFLINE-AI.bat','STOP-OFFLINE-AI.bat','STATUS.bat','SETUP-MAC.command','EASY-INSTALL (Mac).command','START-OFFLINE-AI-MAC.command','STOP-OFFLINE-AI-MAC.command','STATUS-MAC.command','README.md','START-HERE.txt','ADVANCED.md','README-OUTAGE.txt','kit-settings.example.ini','kit-settings.ini','LICENSE')) {
+  foreach ($item in @('scripts','www','mac','catalog','VERSION','SETUP.bat','EASY-INSTALL (Windows).bat','START-OFFLINE-AI.bat','STOP-OFFLINE-AI.bat','STATUS.bat','SETUP-MAC.command','EASY-INSTALL (Mac).command','START-OFFLINE-AI-MAC.command','STOP-OFFLINE-AI-MAC.command','STATUS-MAC.command','README.md','START-HERE.txt','ADVANCED.md','README-OUTAGE.txt','kit-settings.example.ini','kit-settings.ini','LICENSE')) {
     $src = Join-Path $Kit $item
     if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination $target -Recurse -Force }
   }
   Write-Host 'Continuing setup in the new folder...'
   $argList = @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $target 'scripts\setup.ps1'))
-  foreach ($pair in @(@('-HardwareProfile',$HardwareProfile),@('-Tier',$Tier),@('-Models',$Models),@('-Zims',$Zims))) { if ($pair[1]) { $argList += @($pair[0], $pair[1]) } }
-  foreach ($sw in @(@('-Test',$Test),@('-Easy',$Easy),@('-SkipWikipedia',$SkipWikipedia),@('-WithWikipedia',$WithWikipedia),@('-UseSystemOllama',$UseSystemOllama),@('-NoStart',$NoStart),@('-Yes',$Yes))) { if ($sw[1]) { $argList += $sw[0] } }
+  foreach ($pair in @(@('-HardwareProfile',$HardwareProfile),@('-Tier',$Tier),@('-Models',$Models),@('-Zims',$Zims),@('-ExtraLibraries',$ExtraLibraries))) { if ($pair[1]) { $argList += @($pair[0], $pair[1]) } }
+  foreach ($sw in @(@('-Test',$Test),@('-Easy',$Easy),@('-SkipWikipedia',$SkipWikipedia),@('-WithWikipedia',$WithWikipedia),@('-UseSystemOllama',$UseSystemOllama),@('-NoStart',$NoStart),@('-Yes',$Yes),@('-ShareWifi',$ShareWifi))) { if ($sw[1]) { $argList += $sw[0] } }
   & (Get-Process -Id $PID).Path @argList
   exit $LASTEXITCODE
 }
@@ -90,13 +96,21 @@ if ($DetectOnly) {
   exit 0
 }
 $wantWiki = -not $SkipWikipedia
+$extraCat = @(Get-ExtraCatalog)
+$extraSel = @()
+if ($ExtraLibraries) { $extraSel = @(Resolve-ExtraIds $ExtraLibraries $extraCat) }
+$shareChoice = ([bool]$ShareWifi -or [bool]$ShareOnWifi)   # Easy keeps the current setting (off on a new kit)
 
-if ($TestMode) {
-  $tierName = 'test'; $modelList = @()
-} elseif ($Easy) {
+function Step([int]$n, [string]$title) {
+  Write-Host ''
+  Write-Host ("--- Step {0} of {1}: {2} " -f $n, $WizardSteps, $title).PadRight(64, '-') -ForegroundColor Cyan
+}
+$WizardSteps = 6   # Phase 3 can add "Offline regional maps" as another step before the summary.
+
+if ($Easy) {
   $pick = Select-ProfileForDisk $hwProfile $hw.FreeGB
   if ($SkipWikipedia -and $pick) { $pick.Wikipedia = $false }
-  if (-not $pick) {
+  if (-not $pick -and -not $TestMode) {
     $lite = Get-ProfileNeedGB 'lite'
     Write-Host ''
     Write-Host ("There is not enough free space on this drive. The smallest version needs about {0:N0} GB" -f $lite) -ForegroundColor Red
@@ -104,34 +118,34 @@ if ($TestMode) {
     Write-Host 'and copy this folder onto it), then double-click EASY-INSTALL (Windows) again.' -ForegroundColor Red
     exit 1
   }
-  if ($pick.Profile -ne $hwProfile) {
-    Write-Host ("To fit the free space, installing the {0} version instead." -f $Profiles[$pick.Profile].Label) -ForegroundColor Yellow
-  }
-  $hwProfile = $pick.Profile
-  $wantWiki = $pick.Wikipedia
-  if (-not $wantWiki -and -not $SkipWikipedia) {
-    Write-Host 'Full Wikipedia (127 GB) will NOT be downloaded because there is not enough free space.' -ForegroundColor Yellow
-    Write-Host 'Everything else works. You can add Wikipedia later: free up about 140 GB and run SETUP.bat.' -ForegroundColor Yellow
+  if ($pick) {
+    if ($pick.Profile -ne $hwProfile) {
+      Write-Host ("To fit the free space, installing the {0} version instead." -f $Profiles[$pick.Profile].Label) -ForegroundColor Yellow
+    }
+    $hwProfile = $pick.Profile
+    $wantWiki = $pick.Wikipedia
+    if (-not $wantWiki -and -not $SkipWikipedia -and -not $TestMode) {
+      Write-Host 'Full Wikipedia (127 GB) will NOT be downloaded because there is not enough free space.' -ForegroundColor Yellow
+      Write-Host 'Everything else works. You can add Wikipedia later: free up about 140 GB and run SETUP.bat.' -ForegroundColor Yellow
+    }
   }
   $tierName = $Profiles[$hwProfile].Tier
   $modelList = Get-ModelsForSet $Profiles[$hwProfile].Models
 } else {
-  $defTier = '2'; if ($Profiles[$hwProfile].Tier -eq 'essentials') { $defTier = '1' }
   Write-Host ''
-  Write-Host 'Which library do you want? (Full English Wikipedia ~127 GB is included and downloads'
-  Write-Host 'in the background the first time you start the kit.)'
-  Write-Host '  1) Essentials   - survival, first aid, water, food, knots, WikiMed   (~4 GB)'
-  Write-Host '  2) Recommended  - Essentials + Wikipedia Medicine, Wikivoyage,'
-  Write-Host '                    iFixit repair guides, Gardening Q&A               (~11 GB)'
-  if (-not $Tier -and -not $Zims) { $Tier = Ask 'Type 1 or 2' $defTier }
-  $tierName = 'recommended'; if ($Tier -eq '1' -or $Tier -eq 'essentials') { $tierName = 'essentials' }
+  Write-Host '=================== SETUP WIZARD ===================' -ForegroundColor Cyan
+  Write-Host 'Choose what to install. Press Enter to take the suggested answer [in brackets].'
+  Write-Host 'Nothing is downloaded until you say yes on the summary screen at the end.'
 
+  # Step 1: AI model size
+  Step 1 'AI model size'
+  Write-Host ("This computer: {0} GB memory, {1}." -f $hw.RamGB, $gpuText)
   $defModels = @{ lite='0'; standard='1'; full='2' }[$hwProfile]
-  Write-Host ''
-  Write-Host 'Which AI models?'
-  Write-Host '  0) Lite  - llama3.2:3b, medgemma:4b                                    (~5 GB)'
-  Write-Host '  1) Core  - Lite + qwen3.5:9b, phi4-mini                                (~15 GB)'
-  Write-Host '  2) All   - Core + gemma3:4b, gemma3:12b, qwen3:14b (best use of the GPU) (~35 GB)'
+  Write-Host '  0) Lite  - llama3.2:3b, medgemma:4b                                    (~5 GB)  any computer'
+  Write-Host '  1) Core  - Lite + qwen3.5:9b, phi4-mini                                (~15 GB) NVIDIA graphics card'
+  Write-Host '  2) All   - Core + gemma3:4b, gemma3:12b, qwen3:14b (best use of the GPU) (~35 GB) 12 GB+ graphics card'
+  Write-Host "  Recommended for this computer: $defModels"
+  if ($TestMode) { Write-Host '  (TEST MODE: the test installs only llama3.2:3b, whatever you pick here.)' -ForegroundColor Yellow }
   if (-not $Models) { $Models = Ask 'Type 0, 1 or 2' $defModels }
   if ($Models.Contains(':') -or $Models.Contains(',')) {
     $modelList = @()
@@ -141,33 +155,83 @@ if ($TestMode) {
     if ($Models -eq '0' -or $Models -eq 'lite') { $set = 'lite' } elseif ($Models -eq '1' -or $Models -eq 'core') { $set = 'core' }
     $modelList = Get-ModelsForSet $set
   }
-  if (-not $SkipWikipedia -and -not $WithWikipedia -and ($hwProfile -eq 'lite' -or $hw.FreeGB -lt ($WikipediaGB + 60))) {
-    $defW = 'Y'; if ($hw.FreeGB -lt ($WikipediaGB + 40)) { $defW = 'N' }
-    $a = Ask 'Also download full English Wikipedia later (127 GB)? (Y/N)' $defW
+
+  # Step 2: core library
+  Step 2 'Core library (always included)'
+  $defTier = '2'; if ($Profiles[$hwProfile].Tier -eq 'essentials') { $defTier = '1' }
+  Write-Host '  1) Essentials   - survival, first aid, water, food, knots, WikiMed   (~4 GB)'
+  Write-Host '  2) Recommended  - Essentials + Wikipedia Medicine, Wikivoyage,'
+  Write-Host '                    iFixit repair guides, Gardening Q&A               (~11 GB)'
+  if (-not $Tier -and -not $Zims) { $Tier = Ask 'Type 1 or 2' $defTier }
+  $tierName = 'recommended'; if ($Tier -eq '1' -or $Tier -eq 'essentials') { $tierName = 'essentials' }
+
+  # Step 3: full English Wikipedia
+  Step 3 'Full English Wikipedia'
+  Write-Host ('  All of English Wikipedia with pictures, about {0}. It downloads in the background the' -f (Format-GB ($WikipediaGB * 1e9)))
+  Write-Host '  first time you start the kit (everything else works meanwhile) and resumes if interrupted.'
+  if (-not $SkipWikipedia -and -not $WithWikipedia) {
+    $defW = 'Y'; if (-not $TestMode -and $hw.FreeGB -lt ($WikipediaGB + 40)) { $defW = 'N'; Write-Host ("  This drive has only {0} GB free, so the suggestion is No." -f $hw.FreeGB) -ForegroundColor Yellow }
+    $a = Ask 'Download full English Wikipedia? (Y/N)' $defW
     $wantWiki = ($a -match '^[Yy]')
+  } else { Write-Host ("  Chosen on the command line: {0}" -f $(if ($wantWiki) { 'Yes' } else { 'No' })) }
+
+  # Step 4: extra libraries
+  Step 4 'Extra Libraries (optional)'
+  Show-ExtraCatalog $extraCat
+  if (-not $ExtraLibraries) {
+    $ans = Ask 'Type numbers or names (e.g. 1,3), "all", or press Enter for none' ''
+    $extraSel = @(Resolve-ExtraIds $ans $extraCat)
   }
+  if ($extraSel.Count) { Write-Host ('  Chosen: ' + (($extraSel | ForEach-Object { $_.Id }) -join ', ')) } else { Write-Host '  None (you can add them any time from STATUS.bat).' }
+
+  # Step 5: share on Wi-Fi
+  Step 5 'Share on home Wi-Fi (phones and tablets)'
+  Write-Host '  Lets phones and tablets on the same Wi-Fi use the chat and library. Trusted home Wi-Fi only.'
+  if (-not $ShareWifi) {
+    $defS = 'N'; if ($ShareOnWifi) { $defS = 'Y' }
+    $a = Ask 'Turn on Share on Wi-Fi? (Y/N)' $defS
+    $shareChoice = ($a -match '^[Yy]')
+  } else { Write-Host '  Chosen on the command line: ON' }
+  if ($shareChoice) { Write-WifiWarning }
+
+  # (Phase 3: an "Offline regional maps" step goes here.)
 }
 
 if ($TestMode) {
   $tierName = 'test'; $Zims = 'knots,water,wpmed'
   $modelList = @($ModelCatalog | Where-Object { $_.Name -eq 'llama3.2:3b' })
-  $wantWiki = -not $SkipWikipedia
 }
 $zimEntries = @($ZimCatalog | Where-Object { $_.Tier -eq 'essentials' -or ($tierName -eq 'recommended' -and $_.Tier -eq 'recommended') })
 if ($Zims) { $ids = @($Zims -split ',' | ForEach-Object { $_.Trim().ToLower() }); $zimEntries = @($ZimCatalog | Where-Object { $ids -contains $_.Id -and $_.Tier -ne 'always' }) }
-if ($wantWiki) { Set-KitSetting 'SKIP_WIKIPEDIA' 'no' } else { Set-KitSetting 'SKIP_WIKIPEDIA' 'yes' }
 
 $estGB = $ProgramsGB
-if ($tierName -eq 'essentials') { $estGB += 3.8 } elseif ($tierName -eq 'test') { $estGB += 0.1 } else { $estGB += 11.2 }
+if ($tierName -eq 'essentials') { $estGB += 3.8 } elseif ($tierName -eq 'test') { $estGB += 0.2 } else { $estGB += 11.2 }
 foreach ($m in $modelList) { $estGB += $m.GB }
+$extraGB = 0.0; foreach ($e in $extraSel) { if (-not (Get-ExtraInstalled $e)) { $extraGB += $e.GB } }
+$estGB += $extraGB
 $free = Get-FreeBytes $Kit
-Write-Host ''
-Write-Host ('Installing: library "{0}", models: {1}' -f $tierName, (($modelList | ForEach-Object { $_.Name }) -join ', '))
-if ($wantWiki) { Write-Host ("Setup needs about {0:N0} GB now; full Wikipedia later needs about {1} more." -f $estGB, (Format-GB ($WikipediaGB * 1e9))) }
-else { Write-Host ("Setup needs about {0:N0} GB. Full Wikipedia is switched off." -f $estGB) }
-Write-Host ("Free space on this drive: {0}" -f (Format-GB $free))
-if ($free -lt ($estGB * 1e9)) { Write-Host 'Not enough free space for setup. Free up space or choose another drive.' -ForegroundColor Red; exit 1 }
+
+# Summary (Step 6 in the wizard)
+if (-not $Easy) { Step $WizardSteps 'Summary' } else { Write-Host '' }
+Write-Host ("  AI models:        {0}" -f (($modelList | ForEach-Object { $_.Name }) -join ', '))
+Write-Host ("  Core library:     {0}" -f $tierName)
+Write-Host ("  Full Wikipedia:   {0}" -f $(if ($wantWiki) { 'Yes - about ' + (Format-GB ($WikipediaGB * 1e9)) + ', downloads in the background on first start' } else { 'No' }))
+Write-Host ("  Extra libraries:  {0}" -f $(if ($extraSel.Count) { (($extraSel | ForEach-Object { $_.Id }) -join ', ') + ' (' + (Format-Size $extraGB) + ')' } else { 'none' }))
+Write-Host ("  Share on Wi-Fi:   {0}" -f $(if ($shareChoice) { 'ON (trusted home Wi-Fi only)' } else { 'off' }))
+$totalGB = $estGB; if ($wantWiki) { $totalGB += $WikipediaGB }
+Write-Host ("  Download now:     about {0:N1} GB   (with Wikipedia later: about {1:N0} GB in total)" -f $estGB, $totalGB)
+Write-Host ("  Free space:       {0} on this drive" -f (Format-GB $free))
+if ($free -lt ($estGB * 1e9)) { Write-Host 'Not enough free space for these choices. Free up space, pick fewer extras or a smaller model size, or choose another drive.' -ForegroundColor Red; exit 1 }
 if ($wantWiki -and -not $TestMode -and $free -lt (($estGB + 140) * 1e9)) { Write-Host 'WARNING: there will not be enough room for full Wikipedia (~127 GB) on this drive.' -ForegroundColor Yellow }
+if (-not $Easy) {
+  $go = Ask 'Proceed? (Y/N)' 'Y'
+  if ($go -notmatch '^[Yy]') { Write-Host 'OK - nothing was downloaded or changed. Run SETUP.bat again any time.'; Write-Host 'RESULT: SETUP CANCELLED'; try { Stop-Transcript | Out-Null } catch {}; exit 0 }
+}
+
+# Save the choices so START / STOP / STATUS follow them.
+if ($wantWiki) { Set-KitSetting 'SKIP_WIKIPEDIA' 'no' } else { Set-KitSetting 'SKIP_WIKIPEDIA' 'yes' }
+Set-ShareOnWifi $shareChoice
+if ($extraSel.Count) { Set-KitSetting 'EXTRA_LIBRARIES' (($extraSel | ForEach-Object { $_.Id }) -join ',') }
 
 @{ profile=$hwProfile; tier=$tierName; models=(($modelList | ForEach-Object { $_.Name }) -join ','); wikipedia=$wantWiki; created=(Get-Date -Format 'yyyy-MM-dd') } | ConvertTo-Json | Set-Content -LiteralPath $ConfigFile -Encoding UTF8
 
@@ -222,6 +286,13 @@ foreach ($e in $zimEntries) {
     Write-Host "  - $($e.About): $($z.File)"
     if (-not (Get-Zim -Z $z)) { $failed += $z.File }
   } catch { Write-Host "    Problem: $($_.Exception.Message)" -ForegroundColor Yellow; $failed += $e.Prefix }
+}
+
+if ($extraSel.Count) {
+  Write-Host 'Extra Libraries...'
+  foreach ($e in $extraSel) {
+    try { if (-not (Install-ExtraLibrary $e)) { $failed += $e.Id } } catch { Write-Host "    Problem: $($_.Exception.Message)" -ForegroundColor Yellow; $failed += $e.Id }
+  }
 }
 
 # ---------- 6. Models ----------
