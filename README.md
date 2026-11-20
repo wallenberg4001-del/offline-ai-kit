@@ -13,6 +13,25 @@ There is **one file to double-click**. Pick the line that matches your computer:
 | 🍎 **Mac with an Apple chip** (M1, M2, M3, M4, M5) | **`EASY-INSTALL (Mac).command`** | Fastest Mac version. |
 | 🍏 **Older Mac with an Intel chip** | **the same `EASY-INSTALL (Mac).command`** | It works out which Mac you have by itself. The AI answers more slowly on Intel Macs. |
 
+### Two ways to install – pick one
+
+| I want… | Windows | Mac (Apple chip or Intel) |
+|---|---|---|
+| ⚡ **No questions** – just set it up with good choices for my computer | **`EASY-INSTALL (Windows).bat`** | **`EASY-INSTALL (Mac).command`** |
+| 🧭 **To choose my features** step by step (Setup Wizard) | **`SETUP.bat`** | **`SETUP-MAC.command`** |
+
+**EASY-INSTALL** picks the AI size for your computer, includes full Wikipedia (if there's room), leaves
+"Share on Wi-Fi" **off** and adds no extra libraries. You can change all of that later with **STATUS**.
+
+**SETUP (the Setup Wizard)** asks, one screen at a time, before anything downloads:
+1. **AI model size** – it shows your computer and suggests the right size (press Enter to accept).
+2. **Core library** – Essentials (~4 GB) or Recommended (~11 GB).
+3. **Full English Wikipedia** (~127 GB, downloads in the background on first start) – Yes or No.
+4. **Extra Libraries** – optional extras such as Wiktionary, Project Gutenberg books, Stack Exchange Q&A and
+   preparedness guides (type numbers like `1,3`, or `all`, or just press Enter for none).
+5. **Share on home Wi-Fi** for phones and tablets – off unless you say yes.
+6. **Summary** – every choice, the total download size and your free space, then **Proceed? (Y/N)**.
+
 **How do I check which Mac I have?** Click the **Apple menu** () in the top-left corner, then **About This Mac**.
 - If you see **Chip: Apple M1** (or M2, M3, M4, M5), you have an **Apple chip**.
 - If you see **Processor: … Intel …**, you have an **Intel Mac**.
@@ -23,7 +42,7 @@ it is a PC. Use the Windows file.
 ## How to get it
 
 1. **Download the kit:** go to the **[latest release](https://github.com/wallenberg4001-del/offline-ai-kit/releases/latest)**
-   and click **`Offline-AI-Kit-x.y.z.zip`** under **Assets** (for example `Offline-AI-Kit-1.0.0.zip`).
+   and click **`Offline-AI-Kit-x.y.z.zip`** under **Assets** (for example `Offline-AI-Kit-1.1.0.zip`).
    *(Or, on this page, click the green **Code** button, then **Download ZIP**. That works too.)*
 2. **Unzip it.**
    - **Windows:** right-click the ZIP, choose **Properties**, tick **Unblock**, click **OK**.
@@ -100,8 +119,72 @@ fingerprint (checksum) so nothing is damaged or tampered with.
 
 ## Want choices, or more control?
 
-- **Want to choose for yourself?** Use **SETUP** instead (`SETUP.bat` on Windows, `SETUP-MAC.command` on Mac). It asks a few simple questions.
+- **Want to choose for yourself?** Use the **Setup Wizard** instead: `SETUP.bat` on Windows, `SETUP-MAC.command` on Mac
+  (see [Two ways to install](#two-ways-to-install--pick-one)).
+- **Already installed?** Double-click **STATUS** (`STATUS.bat` / `STATUS-MAC.command`). Besides showing what's running,
+  it has a small menu: **turn Share on Wi-Fi on/off**, **add Extra Libraries**, and **check for updates**.
 - **Power user?** See [ADVANCED.md](ADVANCED.md) for options, `kit-settings.ini`, ports, and using your own Ollama.
+
+## 📱 Use it on phones and tablets (Share on Wi-Fi)
+
+Off by default. When it's on, phones, tablets and other computers **on the same home Wi-Fi** can use the chat and
+the library in their web browser – handy in a power cut when the laptop is the only "smart" thing with a battery.
+
+- **Turn it on:** double-click **STATUS** and choose **1) Turn Share on Wi-Fi ON** (or say yes in the Setup Wizard).
+  It takes effect straight away; turn it off the same way.
+- **Connect a phone:** the chat page on the computer shows the address (like `http://192.168.1.20:8091`) and a
+  **QR code**. Point the phone's camera at the QR code, or type the address into the phone's browser.
+  START and STATUS print the address too.
+- ⚠️ **Only turn it on at home on Wi-Fi you trust – never on public Wi-Fi** (cafés, hotels, airports). Anyone on
+  the same Wi-Fi can open the chat and the library. There is no password.
+- **What stays private:** the AI program itself always listens only to the computer it runs on. Phones reach it
+  through the chat page, which only allows chatting – not downloading, deleting or changing AI models.
+- **Phone can't connect?**
+  - Windows: the first time, Windows may ask whether to allow **Windows PowerShell** – tick
+    **Private networks** and click **Allow**. Your home network must be set to **Private** (Settings → Network &
+    internet → your Wi-Fi or Ethernet → **Private network**). Allowing apps through the firewall needs an
+    administrator account.
+  - Mac: if the Mac asks whether **perl** may "accept incoming connections", click **Allow**.
+  - Make sure the phone is on the **same Wi-Fi** (not mobile data, not a guest network).
+
+## 📚 Extra Libraries
+
+Optional collections you can add any time: double-click **STATUS** and choose **2) Add Extra Libraries**, then type
+the numbers you want. They download from the official Kiwix server (resuming if interrupted), are checked with their
+SHA-256 fingerprint, and appear in the library and in **Ask the library** straight away.
+
+| # | Collection | Size (Nov 2026) |
+|---|---|---|
+| 1 | Sustainable Living Q&A (Stack Exchange) | 26 MB |
+| 2 | Simple English Wiktionary (dictionary) | 30 MB |
+| 3 | Lifehacks Q&A | 47 MB |
+| 4 | Medical Sciences Q&A | 58 MB |
+| 5 | Amateur (ham) Radio Q&A | 74 MB |
+| 6 | The Great Outdoors / survival Q&A | 135 MB |
+| 7 | Cooking Q&A | 227 MB |
+| 8 | Car and motor repair Q&A | 326 MB |
+| 9 | TruePrepper emergency preparedness guides | 1.3 GB |
+| 10 | Ready.gov (US government emergency preparedness) | 1.9 GB |
+| 11 | Home Improvement / DIY Q&A | 1.9 GB |
+| 12 | Project Gutenberg books: Medicine | 1.9 GB |
+| 13 | Wikibooks: free textbooks and manuals (no pictures) | 3.3 GB |
+| 14 | Project Gutenberg books: Agriculture | 4.2 GB |
+| 15 | Project Gutenberg books: Technology | 12 GB |
+| 16 | English Wiktionary (full dictionary, no pictures) | 14 GB |
+| 17 | **All** of Project Gutenberg in English | **206 GB** |
+
+Sizes change a little with each new edition. wikiHow is not offered because Kiwix no longer publishes it.
+The list lives in `catalog/extra-libraries.txt`.
+
+## 🔄 Check for updates
+
+The chat page has a **Check for updates** button (and STATUS has **3) Check for updates**). It only runs when you
+click it – the kit never contacts the internet on its own. It tells you whether you have the newest version; if a
+newer one exists it shows a link to what's new and to the download. **Nothing is downloaded or changed for you.**
+With no internet it simply says so – the kit doesn't need internet to run.
+
+**Updating:** download the new ZIP, unzip it, then move your `library`, `ollama-models` and `runtime` folders (and
+`kit-settings.ini`, if you have one) from the old kit folder into the new one. Run **STOP** on the old one first.
 
 ## FAQ
 
@@ -109,7 +192,10 @@ fingerprint (checksum) so nothing is damaged or tampered with.
 
 **Is it free?** Yes. The kit, the AI models and the library are all free. No subscriptions, no accounts.
 
-**Is my data private?** Yes. Everything runs on your computer and only listens to your own computer (`127.0.0.1`), not the network.
+**Is my data private?** Yes. Everything runs on your computer and only listens to your own computer (`127.0.0.1`), not the network –
+unless you turn on [Share on Wi-Fi](#-use-it-on-phones-and-tablets-share-on-wi-fi), which opens the chat page and library (never the AI program itself) to your home Wi-Fi.
+
+**Can my family use it on their phones?** Yes – turn on [Share on Wi-Fi](#-use-it-on-phones-and-tablets-share-on-wi-fi) and scan the QR code on the chat page. Home Wi-Fi only.
 
 **How long does setup take?** Usually 1–3 hours for the main part (depends on your internet), then Wikipedia keeps
 downloading in the background – from about an hour to a day or two. Everything else works meanwhile.
@@ -148,7 +234,7 @@ See `START-HERE.txt` for exactly what to click.
 > ⚠️ The AI can be wrong. For anything medical, check the Offline Library (WikiMed,
 > Wikipedia Medicine) too, and call emergency services when you can. This is not a doctor.
 
-**The rest of this page is the detailed guide for SETUP (the version with questions).**
+**The rest of this page is the detailed guide for SETUP (the Setup Wizard, the version with questions).**
 **Windows:** Steps 1–4 below. **Mac (Apple chip or Intel):** jump to [Mac](#mac-apple-chip-or-intel).
 
 ---
@@ -185,10 +271,14 @@ See `START-HERE.txt` for exactly what to click.
 
 1. Open the folder and double-click **`SETUP.bat`**.
    - If Windows shows "Windows protected your PC", click **More info** → **Run anyway**.
-2. Answer the questions (just pressing **Enter** picks the recommended choice):
+2. Answer the Setup Wizard's questions (just pressing **Enter** picks the suggested choice):
    - **Folder** – keep the one shown, or type another (e.g. on an external drive).
-   - **Library** – `1` Essentials or `2` Recommended.
-   - **AI models** – `1` Core or `2` All.
+   - **Step 1 – AI model size** – `0` Lite, `1` Core or `2` All (it suggests one for your PC).
+   - **Step 2 – Core library** – `1` Essentials or `2` Recommended.
+   - **Step 3 – Full English Wikipedia** – `Y` or `N`.
+   - **Step 4 – Extra Libraries** – numbers like `1,3`, `all`, or Enter for none.
+   - **Step 5 – Share on home Wi-Fi** – `N` (default) or `Y`.
+   - **Step 6 – Summary** – check the sizes and free space, then `Y` to start downloading (`N` changes nothing).
 3. Wait. It downloads the programs, the library and the AI models, and **checks every file**
    against the official checksum so nothing is corrupted. If the internet drops, just run
    `SETUP.bat` again – it picks up where it stopped.
@@ -275,7 +365,8 @@ The easiest way (works every time, no security pop-ups):
 1. Open **Terminal** (press ⌘-Space, type *Terminal*, press Return).
 2. Type `bash ` (with a space after it), then **drag `SETUP-MAC.command` from the folder into the Terminal window**, and press **Return**.
    (For no questions at all, drag `EASY-INSTALL (Mac).command` instead.)
-3. Answer the questions (Return picks the suggested choice): folder, library tier, model set.
+3. Answer the Setup Wizard's questions (Return picks the suggested choice): folder, then AI model size, core library,
+   full Wikipedia, Extra Libraries, Share on home Wi-Fi, and a summary with **Proceed? (Y/N)** before anything downloads.
 
 Setup downloads the programs (Kiwix for macOS and Ollama for macOS from their official sites),
 the library and the models, and checks every file against its official checksum. If the internet
@@ -305,6 +396,8 @@ by itself so Wikipedia appears. Progress shows in `STATUS-MAC.command` and at th
 - The chat page is opened straight from the kit folder (`www/chat.html`) instead of from a little web server,
   because new Macs don't come with Python or another dependable built-in web server. The kit's own Ollama is
   set to accept requests from that page. Everything still only listens on `127.0.0.1` (this Mac).
+- With **Share on Wi-Fi** on, the Mac also runs a tiny web server for phones (port 8091), using the `perl` that is
+  built into macOS (no Python or developer tools needed), and the chat page opens from `http://127.0.0.1:8091`.
 - Use **Chrome, Safari or Firefox**; if Safari won't connect, try Chrome or Firefox.
 - The kit's Ollama runs on port 11435 with its models in `ollama-models/` and its settings in `home/`;
   an Ollama app you installed yourself (port 11434) is never touched.
@@ -375,9 +468,12 @@ Only one model is loaded at a time, so they don't add up in GPU memory.
   (which uses port 11434), so you can have both.
 - On Windows a tiny PowerShell web server shows the chat page on `127.0.0.1:8091`. No Python needed.
   On Mac the page is opened directly from the kit folder (see Mac notes).
+- **Share on Wi-Fi** (off by default): only the chat page server (port 8091) listens on the home network. It passes
+  chat requests on to the AI program and library pages on to Kiwix. The AI program (port 11435) and the library
+  (port 8090) always stay on `127.0.0.1`; only chat/list requests and read-only library pages are passed through. The QR code is made inside the page, offline.
 - **Ask the library** is plain JavaScript in the chat page (`www/ask-library.js`). It uses Kiwix's built-in search,
   reads the articles straight from Kiwix, and sends them to the kit's Ollama. No extra programs, no extra index.
-- Everything listens only on `127.0.0.1` (this computer), not your network.
+- Unless Share on Wi-Fi is on, everything listens only on `127.0.0.1` (this computer), not your network.
 - To move the kit to another drive, stop it and move the whole folder. Nothing is installed in Windows.
 - Program and library versions are looked up when you run setup, so you get the newest ones.
 
@@ -397,6 +493,8 @@ Only one model is loaded at a time, so they don't add up in GPU memory.
 | Wikipedia isn't in the library yet | Run `STATUS.bat` to see progress. It appears automatically when the download and check finish. |
 | Wikipedia says "not enough free space" | Free up space (or move the kit folder to a bigger drive) and start again. It resumes. |
 | A file "was damaged and deleted" | Run `SETUP.bat` (or `START` for Wikipedia) again to re-download it. |
+| A phone can't open the shared address | See [Phone can't connect?](#-use-it-on-phones-and-tablets-share-on-wi-fi). Check STATUS says **Share on Wi-Fi: ON** and the phone is on the same Wi-Fi. |
+| "Check for updates" says I'm offline | That's fine – the kit works without internet. Try again when you're online. |
 | Want a fresh start | Run `STOP-OFFLINE-AI.bat`, then delete the folders `runtime`, `library`, `ollama-models`, `home`, `logs`. |
 
 ## Credits & licences

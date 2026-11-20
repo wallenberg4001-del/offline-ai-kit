@@ -1,0 +1,22 @@
+# Offline AI Kit - optional Extra Libraries (add them with STATUS, or see ADVANCED.md).
+# One collection per line:  id | kiwix folder | file prefix | approx size in GB | group | description
+# The newest dated file (prefix_YYYY-MM.zim) is picked at download time and checked with its SHA-256.
+# Sizes were checked on download.kiwix.org on 2026-11-19 and change a little with each new edition.
+# Every collection below has a full-text search index, so "Ask the library" can use it (except gutenberg-all).
+se-sustainability|zim/stack_exchange|sustainability.stackexchange.com_en_all|0.03|Q&A|Sustainable Living Q&A (Stack Exchange)
+wiktionary-simple|zim/wiktionary|wiktionary_en-simple_all_nopic|0.03|Reference|Simple English Wiktionary (dictionary, easy words)
+se-lifehacks|zim/stack_exchange|lifehacks.stackexchange.com_en_all|0.05|Q&A|Lifehacks Q&A (Stack Exchange)
+se-medical|zim/stack_exchange|medicalsciences.stackexchange.com_en_all|0.06|Q&A|Medical Sciences Q&A (Stack Exchange)
+se-ham|zim/stack_exchange|ham.stackexchange.com_en_all|0.07|Q&A|Amateur (ham) Radio Q&A (Stack Exchange)
+se-outdoors|zim/stack_exchange|outdoors.stackexchange.com_en_all|0.14|Q&A|The Great Outdoors / survival Q&A (Stack Exchange)
+se-cooking|zim/stack_exchange|cooking.stackexchange.com_en_all|0.23|Q&A|Cooking Q&A (Stack Exchange)
+se-mechanics|zim/stack_exchange|mechanics.stackexchange.com_en_all|0.33|Q&A|Car and motor repair Q&A (Stack Exchange)
+trueprepper|zim/other|trueprepper.com_en_all|1.3|Preparedness|TruePrepper emergency preparedness guides
+ready-gov|zim/zimit|ready.gov_en_all|1.9|Preparedness|Ready.gov (US government emergency preparedness)
+se-diy|zim/stack_exchange|diy.stackexchange.com_en_all|1.9|Q&A|Home Improvement / DIY Q&A (Stack Exchange)
+gutenberg-medicine|zim/gutenberg|gutenberg_en_lcc-r|1.9|Books|Project Gutenberg books: Medicine (public domain)
+wikibooks|zim/wikibooks|wikibooks_en_all_nopic|3.3|Reference|Wikibooks: free textbooks and how-to manuals (no pictures)
+gutenberg-agriculture|zim/gutenberg|gutenberg_en_lcc-s|4.2|Books|Project Gutenberg books: Agriculture, farming, animals
+gutenberg-technology|zim/gutenberg|gutenberg_en_lcc-t|12|Books|Project Gutenberg books: Technology, engineering, crafts
+wiktionary|zim/wiktionary|wiktionary_en_all_nopic|14|Reference|English Wiktionary (full dictionary, no pictures)
+gutenberg-all|zim/gutenberg|gutenberg_en_all|206|Books|ALL of Project Gutenberg in English (~206 GB! no search index)

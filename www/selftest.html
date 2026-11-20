@@ -25,8 +25,9 @@ It takes up to a few minutes on a slow computer.</p>
 (function () {
   "use strict";
   var CFG = window.KIT_CONFIG || {};
-  var API = "http://127.0.0.1:" + (CFG.ollamaPort || 11435);
-  var LIB = "http://127.0.0.1:" + (CFG.libraryPort || 8090);
+  var EP = AskLibrary.endpoints(location, CFG);   // same rules as the chat page (works from a phone too)
+  var API = EP.ollama;
+  var LIB = EP.library;
   var params = {};
   (location.hash.slice(1) + "&" + location.search.slice(1)).split("&").forEach(function (kv) {
     if (!kv) return; var i = kv.indexOf("="); var k = i < 0 ? kv : kv.slice(0, i); var v = i < 0 ? "" : kv.slice(i + 1);
