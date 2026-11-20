@@ -25,6 +25,17 @@ check("custom ports are respected", e.ollama === "http://10.0.0.9:9000/ollama" &
 e = A.endpoints({ protocol: "file:", hostname: "", host: "" }, { ollamaPort: 11500, libraryPort: 9001 });
 check("custom ports locally", e.ollama === "http://127.0.0.1:11500" && e.library === "http://127.0.0.1:9001" && e.home === "http://127.0.0.1:9001/", e);
 
+// ---- every inline <script> in the pages must at least parse ----
+{
+  const vm = require("vm");
+  for (const page of ["chat.html", "selftest.html"]) {
+    const html = fs.readFileSync(path.join(__dirname, "..", "www", page), "utf8");
+    const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g; let m, n = 0, bad = "";
+    while ((m = re.exec(html))) { n++; try { new vm.Script("(async function(){" + m[1] + "\n})", { filename: page }); } catch (e) { bad += e.message + " "; } }
+    check(page + ": inline scripts parse (" + n + ")", n > 0 && !bad, bad);
+  }
+}
+
 // ---- versions ----
 const cmp = U.compareVersions;
 check("1.0.0 < 1.1.0", cmp("1.0.0", "1.1.0") === -1);
