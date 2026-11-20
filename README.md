@@ -35,9 +35,10 @@ There is **one file to double-click**. Pick the line that matches your computer:
    (about 10 GB). Kiwix publishes Canada as one file, so picking any combination, or Canada itself, downloads it once.
    Other regions are separate files. Press Enter for none. Easy Install skips this.
 7. **Which computers** – **This computer only**, or **All computers (universal drive)**. Universal downloads the
-   programs for Windows, Mac (Apple chip and Intel) and Linux (64-bit PC and ARM) so one exFAT drive works on each.
+   programs for Windows x64, Mac (Apple silicon and Intel) and Linux (x64 and ARM64) so one **exFAT** drive works on each.
    Models, Wikipedia, extra libraries and maps stay **one shared copy**. The summary shows the extra disk space
    (about 11.5 GB more on Windows, about 13 GB more on Mac and Linux, on top of this computer's programs).
+   Windows on ARM, 32-bit Windows, and Alpine or other musl Linux are not included. On macOS 12 only the library is installed.
 8. **Summary** – every choice, the total download size and your free space, then **Proceed? (Y/N)**.
 
 **How do I check which Mac I have?** Click the **Apple menu** () in the top-left corner, then **About This Mac**.
@@ -74,9 +75,10 @@ it is a PC. Use the Windows file.
 
 ## What you need
 
-- **Windows PC:** Windows 10 or 11 (64-bit). An NVIDIA graphics card makes the AI faster, but is not needed.
+- **Windows PC:** Windows 10 or 11, **64-bit Intel or AMD** (x64). An NVIDIA graphics card makes the AI faster, but is not needed. Windows on ARM and 32-bit Windows are not supported.
 - **Mac with an Apple chip:** macOS 13 (Ventura) or newer. (macOS 14 or newer gets the newest AI program. On macOS 12, only the library is installed.)
 - **Intel Mac:** macOS 13 (Ventura) or newer for the AI. On macOS 12 (Monterey), only the library is installed.
+- **Linux:** 64-bit PC (x64) or ARM64, with glibc (Ubuntu, Debian, Fedora and similar). Alpine and other musl Linux are not supported.
 - **Memory:** 8 GB works. 16 GB or more is better.
 - **Internet:** only once, for setup.
 - **Free disk space** – it picks a size that fits, and skips Wikipedia if there isn't room:
@@ -257,6 +259,10 @@ See `START-HERE.txt` for exactly what to click.
 The whole kit folder can live on one USB drive and run on Windows, Mac and Linux. Format the drive as **exFAT**
 (or NTFS, or APFS). **FAT32 cannot store a file larger than 4 GB**, so setup refuses Wikipedia, the bigger
 libraries and the maps on a FAT32 drive and tells you to use exFAT, NTFS or APFS.
+
+**All computers (universal drive).** In the Setup Wizard, under **Which computers**, choose **All computers (universal drive)** (or **This computer only**). Universal downloads the programs for every supported computer onto that one drive. Use **exFAT** so Windows, Mac and Linux can all read it. Models, Wikipedia, extra libraries and maps stay one shared copy. Before anything downloads, the summary shows the extra programs: about 11.5 GB more on Windows, about 13 GB more on Mac and Linux, on top of this computer's programs.
+
+Supported computers are **Windows x64** (64-bit Intel and AMD), **Mac** (Apple silicon and Intel) and **Linux** (x64 and ARM64). Not included: Windows on ARM, 32-bit Windows, and Alpine or other musl Linux. On macOS 12 only the library is installed; the AI program needs macOS 13 or newer.
 
 - **Where it looks for free space.** The free-space check uses the drive the kit folder is on, including when Windows gives that drive a different letter the next time you plug it in.
 - **Drive letters.** Paths inside the kit are relative to the folder. The Desktop shortcut stores a full path, and **START** rewrites that shortcut every time, so run START from the USB after the letter changes.
@@ -456,7 +462,7 @@ bash STATUS-LINUX.sh
 bash STOP-OFFLINE-AI-LINUX.sh
 ```
 
-Linux downloads `kiwix-tools_linux-x86_64` or `kiwix-tools_linux-aarch64` (the musl build when `ldd --version` says musl) and `ollama-linux-amd64` or `ollama-linux-arm64` (`.tgz`, or `.tar.zst` when that is the file the release publishes). The chat page server is `mac/serve-chat.py`. The address phones use comes from `ip route get` (the `src` address). Ollama stays on `127.0.0.1:11435` and Kiwix on `127.0.0.1:8090`. Port 8091 is open to the network only when Share on Wi-Fi is on. On x86_64, Easy Install uses the smaller CPU-sized models (same idea as an Intel Mac); the wizard can choose a larger set.
+Linux (x64 and ARM64, glibc) downloads `kiwix-tools_linux-x86_64` or `kiwix-tools_linux-aarch64` and `ollama-linux-amd64` or `ollama-linux-arm64` (`.tgz`, or `.tar.zst` when that is the file the release publishes). Alpine and other musl Linux are not supported. The chat page server is `mac/serve-chat.py`. The address phones use comes from `ip route get` (the `src` address). Ollama stays on `127.0.0.1:11435` and Kiwix on `127.0.0.1:8090`. Port 8091 is open to the network only when Share on Wi-Fi is on. On x86_64, Easy Install uses the smaller CPU-sized models (same idea as an Intel Mac); the wizard can choose a larger set.
 
 ---
 

@@ -147,6 +147,9 @@ check("status always shows the chat page server", /show "Chat page server" "\$CH
 check("windows start always runs the chat server", /Start-ChatServer/.test(startPs) && !/if \(\$ShareOnWifi\) \{[^}]*Start-ChatServer/.test(startPs));
 check("wikipedia names the ini only when the key is in the file", /is_yes "\$\(setting SKIP_WIKIPEDIA no\)"/.test(startSh) && /ContainsKey\('SKIP_WIKIPEDIA'\)/.test(startPs));
 check("wikipedia can be off without blaming the ini", /Wikipedia is switched off\. Everything else works\./.test(startSh) && /Wikipedia is switched off\. Everything else works\./.test(startPs));
+check("test mode names the ini only when the key is in the file", /is_yes "\$\(setting TEST_MODE no\)"/.test(startSh) && /ContainsKey\('TEST_MODE'\)/.test(startPs));
+check("test mode can be on without blaming the ini", /warn "TEST MODE is on\."/.test(startSh) && /'TEST MODE is on\.'/.test(startPs));
+check("test mode still names the ini when the key is set", /TEST MODE is on \(kit-settings\.ini\)\./.test(startSh) && /TEST MODE is on \(kit-settings\.ini\)\./.test(startPs));
 check("linux start uses the mac script", /mac\/start\.sh/.test(read("linux/start.sh")));
 check("linux setup uses the mac script", /mac\/setup\.sh/.test(read("linux/setup.sh")));
 

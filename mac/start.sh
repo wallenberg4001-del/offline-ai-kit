@@ -79,6 +79,12 @@ show_share_status
 if [ "$SHARE_ON_WIFI" = yes ] && ip="$(lan_ip)"; then say "SHARE URL: http://$ip:$CHAT_PORT/"; fi
 say ""
 say "You can close this window; the kit keeps running until you stop it or restart the computer."
-[ "$TEST_MODE" = yes ] && warn "TEST MODE is on (kit-settings.ini)."
+if [ "$TEST_MODE" = yes ]; then
+  if is_yes "$(setting TEST_MODE no)"; then
+    warn "TEST MODE is on (kit-settings.ini)."
+  else
+    warn "TEST MODE is on."
+  fi
+fi
 say "RESULT: START OK"
 pause_exit 0

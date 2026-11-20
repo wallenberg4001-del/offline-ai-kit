@@ -8,7 +8,13 @@ Ensure-Dirs
 $Host.UI.RawUI.WindowTitle = 'Offline AI - starting'
 $ownTranscript = $false
 if (-not $global:KitTranscript) { try { Start-Transcript -LiteralPath (Join-Path $LogDir 'start-latest.log') | Out-Null; $ownTranscript = $true } catch {} }
-if ($TestMode) { Write-Host 'TEST MODE is on (kit-settings.ini).' -ForegroundColor Yellow }
+if ($TestMode) {
+  if ($KitSettings.ContainsKey('TEST_MODE') -and ($KitSettings['TEST_MODE'] -match '^(?i)(yes|true|1|on)$')) {
+    Write-Host 'TEST MODE is on (kit-settings.ini).' -ForegroundColor Yellow
+  } else {
+    Write-Host 'TEST MODE is on.' -ForegroundColor Yellow
+  }
+}
 Write-Host '=============================================='
 Write-Host '  Offline AI Kit'
 Write-Host "  $Kit"
