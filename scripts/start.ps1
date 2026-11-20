@@ -23,6 +23,8 @@ if ((-not $UseSystemOllama -and -not (Get-OllamaExe)) -or -not (Get-KiwixServeEx
 }
 
 Write-Host ''
+Write-MapsIndex
+New-DesktopShortcut
 Write-Host '[1/4] Offline Library...'
 Start-KitKiwix | Out-Null
 

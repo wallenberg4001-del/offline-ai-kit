@@ -1,0 +1,2 @@
+window.KIT_MAPS = [
+];

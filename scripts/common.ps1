@@ -60,6 +60,7 @@ $ShareOnWifi = ((Get-Setting 'SHARE_ON_WIFI' '0') -match '^(?i)(yes|true|1|on)$'
 $KitVersion = '0.0.0'
 try { $KitVersion = ((Get-Content -LiteralPath (Join-Path $Kit 'VERSION') -ErrorAction Stop | Select-Object -First 1).Trim()) } catch {}
 $ExtraCatalogFile = Join-Path $Kit 'catalog\extra-libraries.txt'
+$MapsCatalogFile = Join-Path $Kit 'catalog\maps.txt'
 $ReleasesApi = 'https://api.github.com/repos/wallenberg4001-del/offline-ai-kit/releases/latest'
 
 $KiwixBase   = 'https://download.kiwix.org'
@@ -225,9 +226,15 @@ function Get-RemoteSize([string]$Url) {
 
 function Resolve-LatestZim($Entry) {
   # Reads the Kiwix folder listing and returns the newest file for this prefix.
+  # Editions look like prefix_YYYY-MM.zim or prefix_YYYY-MMa.zim (a letter after the month).
+  # OFFLINE_AI_ZIM_LISTING = a saved listing, so tests do not touch the network.
   $dirUrl = "$KiwixBase/$($Entry.Dir)/"
-  $html = Invoke-CurlText $dirUrl
-  $pattern = 'href="(' + [regex]::Escape($Entry.Prefix) + '_(\d{4}-\d{2})\.zim)"'
+  if ($env:OFFLINE_AI_ZIM_LISTING -and (Test-Path -LiteralPath $env:OFFLINE_AI_ZIM_LISTING)) {
+    $html = Get-Content -LiteralPath $env:OFFLINE_AI_ZIM_LISTING -Raw
+  } else {
+    $html = Invoke-CurlText $dirUrl
+  }
+  $pattern = 'href="(' + [regex]::Escape($Entry.Prefix) + '_(\d{4}-\d{2}[a-z]?)\.zim)"'
   $found = [regex]::Matches($html, $pattern) | ForEach-Object { [pscustomobject]@{ File=$_.Groups[1].Value; Date=$_.Groups[2].Value } }
   if (-not $found) { throw "No file found for $($Entry.Prefix) in $dirUrl" }
   $latest = $found | Sort-Object Date | Select-Object -Last 1
@@ -261,8 +268,93 @@ function Get-VerifiedZims {
 }
 
 function Get-FreeBytes([string]$Path) {
-  $root = [System.IO.Path]::GetPathRoot((Resolve-Path -LiteralPath $Path).Path)
-  return ([System.IO.DriveInfo]::new($root)).AvailableFreeSpace
+  # Free space on the volume that holds the kit (an external drive, not always C:).
+  $full = $Path
+  if (Test-Path -LiteralPath $Path) { $full = (Resolve-Path -LiteralPath $Path).Path }
+  else {
+    $parent = Split-Path -Parent $Path
+    if ($parent -and (Test-Path -LiteralPath $parent)) { $full = (Resolve-Path -LiteralPath $parent).Path }
+  }
+  $root = [System.IO.Path]::GetPathRoot($full)
+  try { return ([System.IO.DriveInfo]::new($root)).AvailableFreeSpace } catch {}
+  try {
+    $id = $root.TrimEnd('\')
+    $disk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$id'" -ErrorAction Stop
+    return [int64]$disk.FreeSpace
+  } catch {}
+  return [int64]0
+}
+
+function Get-VolumeFilesystem([string]$Path) {
+  # DriveFormat such as NTFS, exFAT, FAT32. Empty when it cannot be read.
+  $full = $Path
+  if (Test-Path -LiteralPath $Path) { $full = (Resolve-Path -LiteralPath $Path).Path }
+  $root = [System.IO.Path]::GetPathRoot($full)
+  try {
+    $fmt = ([System.IO.DriveInfo]::new($root)).DriveFormat
+    if ($fmt) { return $fmt }
+  } catch {}
+  try {
+    $id = $root.TrimEnd('\')
+    $disk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$id'" -ErrorAction Stop
+    if ($disk.FileSystem) { return [string]$disk.FileSystem }
+  } catch {}
+  return ''
+}
+
+function Test-Fat32Volume([string]$Path) {
+  # FAT32, vfat and msdos stop at 4 GiB per file. exFAT, NTFS and APFS do not.
+  $k = ((Get-VolumeFilesystem $Path).ToLower() -replace '[^a-z0-9]', '')
+  return ($k -eq 'fat32' -or $k -eq 'fat' -or $k -eq 'vfat' -or $k -eq 'msdos' -or $k -eq 'msdosfat32')
+}
+
+function Assert-LargeFileFits([string]$Path, [int64]$Bytes, [string]$Label) {
+  if ($Bytes -lt 4294967296) { return $true }
+  if (-not (Test-Fat32Volume $Path)) { return $true }
+  Write-Host 'This drive is FAT32, which cannot store a file larger than 4 GB.' -ForegroundColor Red
+  Write-Host "$Label needs exFAT, NTFS, or APFS." -ForegroundColor Red
+  Write-Host 'Copy this folder onto an exFAT, NTFS, or APFS drive, then run this again.' -ForegroundColor Red
+  return $false
+}
+
+$script:StayAwakeOn = $false
+function Start-StayAwake {
+  # Keeps Windows from sleeping for the life of this process while a download runs.
+  if ($script:StayAwakeOn) { return }
+  try {
+    if (-not ('Kit.Power' -as [type])) {
+      Add-Type -Namespace Kit -Name Power -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("kernel32.dll")]
+public static extern uint SetThreadExecutionState(uint esFlags);
+'@
+    }
+    # ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_AWAYMODE_REQUIRED
+    [void][Kit.Power]::SetThreadExecutionState([uint32]2147483713)
+    $script:StayAwakeOn = $true
+    Write-Host '  This computer will stay awake while the download runs.'
+  } catch {
+    Write-Host '  Could not keep the computer awake. Leave it plugged in and set sleep to Never while downloading.' -ForegroundColor Yellow
+  }
+}
+
+function Repair-ExtractedLinks([string]$Root) {
+  # Vendor archives sometimes contain symlinks. The kit keeps only real files, deepest first.
+  if (-not (Test-Path -LiteralPath $Root)) { return }
+  $items = @(Get-ChildItem -LiteralPath $Root -Recurse -Force -ErrorAction SilentlyContinue | Where-Object {
+    ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $_.LinkType
+  })
+  foreach ($item in ($items | Sort-Object { $_.FullName.Length } -Descending)) {
+    try {
+      $dest = $item.FullName
+      $target = $null
+      if ($item.Target) { $target = @($item.Target) | Select-Object -First 1 }
+      if (-not $target) { Remove-Item -LiteralPath $dest -Force -ErrorAction SilentlyContinue; continue }
+      if (-not [System.IO.Path]::IsPathRooted($target)) { $target = Join-Path (Split-Path -Parent $dest) $target }
+      Remove-Item -LiteralPath $dest -Force -ErrorAction SilentlyContinue
+      if (Test-Path -LiteralPath $target -PathType Container) { Copy-Item -LiteralPath $target -Destination $dest -Recurse -Force }
+      elseif (Test-Path -LiteralPath $target) { Copy-Item -LiteralPath $target -Destination $dest -Force }
+    } catch {}
+  }
 }
 
 function Format-GB([double]$Bytes) { if ($Bytes -lt 1e9) { return ('{0:N0} MB' -f ($Bytes / 1e6)) }; return ('{0:N1} GB' -f ($Bytes / 1e9)) }
@@ -383,6 +475,8 @@ function Get-Zim {
   $dest = Join-Path $Library $Z.File
   $sha  = Get-ExpectedSha $Z.ShaUrl
   if (-not (Test-Path -LiteralPath $dest)) {
+    $remote = Get-RemoteSize $Z.Url
+    if (-not (Assert-LargeFileFits $Library $remote $Z.File)) { return $false }
     Save-ResumableFile -Url $Z.Url -OutFile $dest -ProgressFile $ProgressFile -Label ("Downloading " + $Z.File)
   }
   if (Confirm-FileSha -File $dest -Expected $sha -ProgressFile $ProgressFile) {
@@ -419,7 +513,7 @@ function Get-KitProcess([string]$Name) {
   $p = Get-Process -Id $procId -ErrorAction SilentlyContinue
   if (-not $p) { return $null }
   # Guard against Windows re-using the PID for an unrelated program.
-  $expected = @{ 'kiwix'=@('kiwix-serve'); 'ollama'=@('ollama'); 'chat-server'=@('powershell','pwsh'); 'wikipedia-download'=@('powershell','pwsh') }
+  $expected = @{ 'kiwix'=@('kiwix-serve'); 'ollama'=@('ollama'); 'chat-server'=@('powershell','pwsh'); 'wikipedia-download'=@('powershell','pwsh'); 'add-libraries'=@('powershell','pwsh'); 'add-maps'=@('powershell','pwsh') }
   if ($expected.ContainsKey($Name) -and ($expected[$Name] -notcontains $p.ProcessName.ToLower())) { return $null }
   return $p
 }
@@ -593,26 +687,30 @@ function Show-ShareStatus {
   }
 }
 
-# ---------- Extra Libraries (catalog\extra-libraries.txt) ----------
-function Get-ExtraCatalog {
+# ---------- Extra Libraries (catalog\extra-libraries.txt) and maps (catalog\maps.txt) ----------
+function Read-PipeCatalog([string]$Path) {
   $list = @()
-  if (-not (Test-Path -LiteralPath $ExtraCatalogFile)) { return $list }
-  foreach ($line in Get-Content -LiteralPath $ExtraCatalogFile) {
+  if (-not (Test-Path -LiteralPath $Path)) { return $list }
+  foreach ($line in Get-Content -LiteralPath $Path) {
     $t = $line.Trim(); if (-not $t -or $t.StartsWith('#')) { continue }
     $f = $t.Split('|'); if ($f.Count -lt 6) { continue }
     $list += [pscustomobject]@{ Id=$f[0].Trim(); Dir=$f[1].Trim(); Prefix=$f[2].Trim(); GB=[double]::Parse($f[3].Trim(), [Globalization.CultureInfo]::InvariantCulture); Group=$f[4].Trim(); About=$f[5].Trim() }
   }
   return $list
 }
+function Get-ExtraCatalog { return @(Read-PipeCatalog $ExtraCatalogFile) }
+function Get-MapCatalog { return @(Read-PipeCatalog $MapsCatalogFile) }
 
-function Get-ExtraInstalled($Entry) {
-  # Returns the verified file name for this collection (any edition), or $null.
-  if (-not (Test-Path -LiteralPath $VerifiedDir)) { return $null }
-  $re = '^' + [regex]::Escape($Entry.Prefix) + '_\d{4}-\d{2}\.zim$'
+function Get-PrefixInstalled([string]$Prefix) {
+  # Verified file name for this prefix (prefix_YYYY-MM.zim or prefix_YYYY-MMa.zim), or $null.
+  if (-not $Prefix -or -not (Test-Path -LiteralPath $VerifiedDir)) { return $null }
+  $re = '^' + [regex]::Escape($Prefix) + '_\d{4}-\d{2}[a-z]?\.zim$'
   $m = Get-ChildItem -LiteralPath $VerifiedDir -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -match $re -and (Test-Path -LiteralPath (Join-Path $Library $_.Name)) } | Select-Object -First 1
   if ($m) { return $m.Name }
   return $null
 }
+
+function Get-ExtraInstalled($Entry) { return (Get-PrefixInstalled $Entry.Prefix) }
 
 function Format-Size([double]$GB) { if ($GB -lt 1) { return ('{0:N0} MB' -f ($GB * 1000)) }; return ('{0:N1} GB' -f $GB) }
 
@@ -642,10 +740,15 @@ function Show-ExtraCatalog($Catalog) {
   Write-Host '  [x] = already added. "all" means everything except gutenberg-all (206 GB).'
 }
 
-function Install-ExtraLibrary($Entry) {
+function Install-CatalogZim($Entry) {
   # Download (fastest mirror, resume) + SHA-256 check + VERIFIED marker. Returns $true when ready.
-  $have = Get-ExtraInstalled $Entry
+  $have = Get-PrefixInstalled $Entry.Prefix
   if ($have) { Write-Host "  Already added: $($Entry.About) ($have)" -ForegroundColor Green; return $true }
+  if ($Entry.GB -ge 4 -and (Test-Fat32Volume $Library)) {
+    Write-Host '    This drive is FAT32, which cannot store a file larger than 4 GB.' -ForegroundColor Red
+    Write-Host "    $($Entry.About) needs exFAT, NTFS, or APFS. Skipped." -ForegroundColor Red
+    return $false
+  }
   $z = Resolve-LatestZim ([pscustomobject]@{ Id=$Entry.Id; Dir=$Entry.Dir; Prefix=$Entry.Prefix; About=$Entry.About })
   $size = Get-RemoteSize $z.Url
   $already = [int64]0
@@ -657,6 +760,66 @@ function Install-ExtraLibrary($Entry) {
     return $false
   }
   return (Get-Zim -Z $z)
+}
+function Install-ExtraLibrary($Entry) { return (Install-CatalogZim $Entry) }
+
+function Resolve-MapIds([string]$Text, $Catalog) {
+  # "1,3" / "alberta,europe" / "all" / "" -> catalog entries. "all" is every row; downloads are deduped by file.
+  $out = @()
+  if (-not $Text) { return $out }
+  foreach ($tok in ($Text -split '[,\s]+')) {
+    $t = $tok.Trim().ToLower(); if (-not $t) { continue }
+    if ($t -eq 'all') { return @($Catalog) }
+    $n = 0
+    if ([int]::TryParse($t, [ref]$n)) { if ($n -ge 1 -and $n -le $Catalog.Count) { $out += $Catalog[$n - 1] } else { Write-Host "  (No number $t in the list - skipped)" -ForegroundColor Yellow } }
+    else { $e = $Catalog | Where-Object { $_.Id -eq $t } | Select-Object -First 1; if ($e) { $out += $e } else { Write-Host "  (Unknown map '$t' - skipped)" -ForegroundColor Yellow } }
+  }
+  $seen = @{}; $uniq = @()
+  foreach ($e in $out) { if (-not $seen.ContainsKey($e.Id)) { $seen[$e.Id] = 1; $uniq += $e } }
+  return $uniq
+}
+
+function Get-MapDownloadSet($Entries) {
+  # One download per file prefix. Vancouver Island, British Columbia and Alberta share maps_en_canada.
+  $seen = @{}; $out = @()
+  foreach ($e in $Entries) {
+    if ($seen.ContainsKey($e.Prefix)) { continue }
+    $seen[$e.Prefix] = 1
+    $out += $e
+  }
+  return $out
+}
+
+function Get-MapDownloadGB($Entries) {
+  $gb = 0.0
+  foreach ($e in (Get-MapDownloadSet $Entries)) { if (-not (Get-PrefixInstalled $e.Prefix)) { $gb += $e.GB } }
+  return $gb
+}
+
+function Show-MapCatalog($Catalog) {
+  $i = 0
+  foreach ($e in $Catalog) {
+    $i++
+    $mark = '   '; if (Get-PrefixInstalled $e.Prefix) { $mark = '[x]' }
+    Write-Host ('  {0,2}) {1} {2,-20} {3,9}  {4}' -f $i, $mark, $e.Id, (Format-Size $e.GB), $e.About)
+  }
+  Write-Host '  [x] = already added. Vancouver Island, British Columbia and Alberta share one Canada file (counted once).'
+  Write-Host '  "all" downloads every different map file in this list.'
+}
+
+function Install-Map($Entry) { return (Install-CatalogZim $Entry) }
+
+function Write-MapsIndex {
+  # www/maps-index.js: installed regions, so the maps page and phones on port 8091 can open them.
+  $items = @()
+  foreach ($e in @(Get-MapCatalog)) {
+    $f = Get-PrefixInstalled $e.Prefix
+    if (-not $f) { continue }
+    $about = ($e.About -replace '\\', '\\' -replace '"', '\"')
+    $items += ('  {{ id: "{0}", file: "{1}", about: "{2}" }}' -f $e.Id, $f, $about)
+  }
+  $js = "window.KIT_MAPS = [`n" + ($items -join ",`n") + "`n];`n"
+  try { Set-Content -LiteralPath (Join-Path $WwwDir 'maps-index.js') -Value $js -Encoding ASCII } catch {}
 }
 
 # ---------- Check for updates (only when asked; needs internet; never downloads or changes anything) ----------

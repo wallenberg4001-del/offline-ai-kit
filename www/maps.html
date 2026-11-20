@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offline maps</title>
+<style>
+  :root { --bg: #12140f; --panel: #1c1f18; --ink: #e8eadf; --muted: #a3aa94; --accent: #c8e27a; --accent2: #8ec7b5; --line: #2c3126; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 "Segoe UI", -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif; }
+  header { padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); display: flex; gap: 16px; align-items: center; }
+  h1 { font-size: 18px; margin: 0; }
+  a { color: var(--accent2); }
+  main { padding: 16px; max-width: 40rem; }
+  p { color: var(--muted); }
+  ul { padding-left: 1.2rem; }
+  li { margin: 0.6rem 0; }
+  li a { color: var(--accent); font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Offline maps</h1>
+  <a href="chat.html">Back to chat</a>
+</header>
+<main>
+  <p>These maps are stored in this kit. They use OpenStreetMap data packed for offline reading. Nothing is loaded from the internet. On a phone, open this page from the chat address on your home Wi-Fi.</p>
+  <p id="empty">No regional maps are installed yet. Add them from STATUS, under Offline maps. Easy Install does not download maps.</p>
+  <ul id="list"></ul>
+</main>
+<script src="kit-config.js"></script>
+<script src="ask-library.js"></script>
+<script src="maps.js"></script>
+<script src="maps-index.js"></script>
+<script>
+(function () {
+  var CFG = window.KIT_CONFIG || {};
+  var EP = (window.AskLibrary && AskLibrary.endpoints) ? AskLibrary.endpoints(location, CFG) : { library: "http://127.0.0.1:8090" };
+  var maps = window.KIT_MAPS || [];
+  var list = document.getElementById("list");
+  var empty = document.getElementById("empty");
+  if (!maps.length) return;
+  empty.style.display = "none";
+  maps.forEach(function (m) {
+    var li = document.createElement("li");
+    var a = document.createElement("a");
+    a.href = KitMaps.mapHref(EP.library, m.file);
+    a.textContent = m.about || m.id;
+    a.rel = "noopener";
+    li.appendChild(a);
+    list.appendChild(li);
+  });
+})();
+</script>
+</body>
+</html>

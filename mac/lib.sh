@@ -1,6 +1,8 @@
 #!/bin/bash
-# Shared settings and helpers for the Offline AI Kit (macOS: Apple Silicon and Intel Macs).
-# Uses only tools built into macOS: bash 3.2, curl, shasum, tar, df, sysctl, open, caffeinate.
+# Shared settings and helpers for the Offline AI Kit (macOS, and Linux when OFFLINE_AI_OS=linux).
+# macOS uses bash 3.2, curl, shasum, tar, df, sysctl, open, caffeinate.
+# Linux scripts set OFFLINE_AI_OS=linux before sourcing this file. Running the Mac scripts on Linux
+# for a test does not switch them: they keep Mac paths unless that variable is set.
 # Everything lives inside the kit folder; nothing is installed system-wide.
 # shellcheck disable=SC2034  # variables are used by the scripts that source this file
 
@@ -21,6 +23,7 @@ CONFIG_FILE="$KIT/kit-config-mac.txt"
 WIKI_PROGRESS="$LOG_DIR/wikipedia-progress.json"
 WIKI_STATUS_JS="$WWW_DIR/wiki-status.js"
 EXTRA_CATALOG_FILE="$KIT/catalog/extra-libraries.txt"
+MAPS_CATALOG_FILE="$KIT/catalog/maps.txt"
 RELEASES_API="https://api.github.com/repos/wallenberg4001-del/offline-ai-kit/releases/latest"
 KIT_VERSION="$(head -1 "$KIT/VERSION" 2>/dev/null | tr -d '\r[:space:]')"; [ -n "$KIT_VERSION" ] || KIT_VERSION=0.0.0
 
@@ -84,6 +87,45 @@ if [ "$MAC_ARCH" = x86_64 ]; then KIWIX_DIR="$RUNTIME/mac-kiwix-intel"; else KIW
 if [ "$OLLAMA_CHANNEL" = pinned ]; then OLLAMA_DIR="$RUNTIME/mac-ollama-$OLLAMA_PIN_VERSION"; else OLLAMA_DIR="$RUNTIME/mac-ollama"; fi
                                       # (Windows uses runtime/ollama, so one drive can hold all of them)
 AI_AVAILABLE=yes; [ "$OLLAMA_CHANNEL" = none ] && AI_AVAILABLE=no
+# Defaults stay Mac. OFFLINE_AI_OS=linux (set by linux/*.sh) switches programs, pid files and the LAN lookup.
+KIT_OS=mac
+PID_TAG=mac
+LOG_TAG=mac
+OS_NAME="Mac"
+LAUNCH_START="START-OFFLINE-AI-MAC.command"
+LAUNCH_SETUP="SETUP-MAC.command"
+LAUNCH_STATUS="STATUS-MAC.command"
+LAUNCH_STOP="STOP-OFFLINE-AI-MAC.command"
+LAUNCH_EASY="EASY-INSTALL (Mac).command"
+LINUX_CPU=""
+LINUX_LIBC="glibc"
+LINUX_KIWIX_ARCH=""
+LINUX_OLLAMA_ASSET=""
+apply_os() {
+  [ "${OFFLINE_AI_OS:-}" = linux ] || return 0
+  KIT_OS=linux
+  PID_TAG=linux
+  LOG_TAG=linux
+  OS_NAME="Linux"
+  LAUNCH_START="START-OFFLINE-AI-LINUX.sh"
+  LAUNCH_SETUP="SETUP-LINUX.sh"
+  LAUNCH_STATUS="STATUS-LINUX.sh"
+  LAUNCH_STOP="STOP-OFFLINE-AI-LINUX.sh"
+  LAUNCH_EASY="EASY-INSTALL (Linux).sh"
+  AI_AVAILABLE=yes
+  ARCH_CMD=""
+  OLLAMA_CHANNEL=current
+  case "$(uname -m)" in
+    aarch64|arm64) LINUX_CPU=arm; LINUX_KIWIX_ARCH=aarch64; LINUX_OLLAMA_ASSET="ollama-linux-arm64.tgz" ;;
+    *) LINUX_CPU=x64; LINUX_KIWIX_ARCH=x86_64; LINUX_OLLAMA_ASSET="ollama-linux-amd64.tgz" ;;
+  esac
+  LINUX_LIBC=glibc
+  if command -v ldd >/dev/null 2>&1 && ldd --version 2>&1 | grep -qi musl; then LINUX_LIBC=musl; fi
+  if [ "$LINUX_CPU" = arm ]; then KIWIX_DIR="$RUNTIME/linux-kiwix-arm"; else KIWIX_DIR="$RUNTIME/linux-kiwix"; fi
+  OLLAMA_DIR="$RUNTIME/linux-ollama"
+  MAC_KIND="Linux"
+}
+apply_os
 KIWIX_BASE="https://download.kiwix.org"
 WIKIPEDIA_PREFIX="wikipedia_en_all_maxi"
 WARN_FREE_BYTES=140000000000          # warn when under ~140 GB free
@@ -147,10 +189,14 @@ profile_models() {
 }
 profile_label()  {
   case "$1" in
-    lite) echo "LITE (8 GB Macs)" ;; standard) echo "STANDARD (16 GB Macs)" ;; large) echo "LARGE (24 GB+ Macs)" ;;
-    intel) echo "INTEL (Intel Macs - AI runs on the processor, so answers are slower)" ;;
-    intel-small) echo "INTEL SMALL (Intel Macs, smaller library to fit the disk)" ;;
-    *) echo "LARGEST (32 GB+ Macs)" ;;
+    lite) echo "LITE (8 GB of memory)" ;; standard) echo "STANDARD (16 GB of memory)" ;; large) echo "LARGE (24 GB of memory or more)" ;;
+    intel)
+      if [ "${KIT_OS:-mac}" = linux ]; then echo "SMALL CPU (Linux on a 64-bit PC - the AI runs on the processor, so answers are slower)"
+      else echo "INTEL (Intel Macs - AI runs on the processor, so answers are slower)"; fi ;;
+    intel-small)
+      if [ "${KIT_OS:-mac}" = linux ]; then echo "SMALL CPU, smaller library (Linux on a 64-bit PC, to fit the disk)"
+      else echo "INTEL SMALL (Intel Macs, smaller library to fit the disk)"; fi ;;
+    *) echo "LARGEST (32 GB of memory or more)" ;;
   esac
 }
 profile_for_ram() {
@@ -239,6 +285,99 @@ file_size() { if [ -f "$1" ]; then wc -c < "$1" | tr -d ' '; else echo 0; fi; }
 sha256_of() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'; else sha256sum "$1" | awk '{print $1}'; fi; }
 md5_of()    { if command -v md5 >/dev/null 2>&1; then md5 -q "$1"; else md5sum "$1" | awk '{print $1}'; fi; }
 free_bytes() { df -Pk "$1" | awk 'NR==2 { printf "%.0f\n", $4 * 1024 }'; }
+fs_type() { # filesystem name of the volume that holds this path (lowercase)
+  local p="$1" t=""
+  if [ "$(uname -s)" = Darwin ]; then
+    t="$(diskutil info "$p" 2>/dev/null | awk -F': ' '/File System Personality/ { gsub(/^ +| +$/, "", $2); print $2; exit }')"
+  elif command -v findmnt >/dev/null 2>&1; then
+    t="$(findmnt -no FSTYPE -T "$p" 2>/dev/null | head -1)"
+  elif df -T "$p" >/dev/null 2>&1; then
+    t="$(df -T "$p" 2>/dev/null | awk 'NR==2 { print $2 }')"
+  fi
+  printf '%s\n' "$t" | tr 'A-Z' 'a-z'
+}
+fat32_blocked() { # true when this volume cannot store a file of 4 GiB or more
+  local t
+  t="$(fs_type "$1" | tr -cd 'a-z0-9')"
+  case "$t" in fat32|vfat|msdos|msdosfat32|fat) return 0 ;; esac
+  return 1
+}
+large_file_fits() { # large_file_fits <path> <bytes> <label>
+  local bytes="${2:-0}"
+  case "$bytes" in ''|*[!0-9]*) bytes=0 ;; esac
+  if [ "$bytes" -lt 4294967296 ]; then return 0; fi
+  if fat32_blocked "$1"; then
+    err "This drive is FAT32, which cannot store a file larger than 4 GB."
+    err "$3 needs exFAT, NTFS, or APFS."
+    err "Copy this folder onto an exFAT, NTFS, or APFS drive, then run this again."
+    return 1
+  fi
+  return 0
+}
+stay_awake() { # keep the computer awake for the life of this process
+  if [ "${KIT_OS:-mac}" = linux ]; then
+    if command -v systemd-inhibit >/dev/null 2>&1; then
+      systemd-inhibit --what=sleep:idle --who="Offline AI Kit" --why="A download is running" --mode=block sleep infinity >/dev/null 2>&1 &
+      say "  This computer will stay awake while the download runs."
+      return 0
+    fi
+  fi
+  if command -v caffeinate >/dev/null 2>&1; then
+    caffeinate -i -w "$$" >/dev/null 2>&1 &
+    say "  This computer will stay awake while the download runs."
+    return 0
+  fi
+  warn "  Could not keep the computer awake. Leave it plugged in and set sleep to Never while downloading."
+}
+exec_bits_stick() { # 0 when a program on this volume can be executed directly
+  local d t
+  d="$(mktemp -d "$KIT/.exec-probe.XXXXXX" 2>/dev/null)" || return 1
+  t="$d/probe.sh"
+  printf '#!/bin/sh\nexit 0\n' > "$t"
+  chmod +x "$t" 2>/dev/null || true
+  if [ -x "$t" ] && "$t" >/dev/null 2>&1; then rm -rf "$d"; return 0; fi
+  rm -rf "$d"
+  return 1
+}
+stage_program_tree() { # stage_program_tree <source dir> <name> -> cache dir that can execute programs
+  local src="$1" name="$2" cache dest marker
+  if [ "$(uname -s)" = Darwin ]; then cache="$HOME/Library/Caches/offline-ai-kit"
+  else cache="${XDG_CACHE_HOME:-$HOME/.cache}/offline-ai-kit"; fi
+  dest="$cache/$name"
+  marker="$dest/.staged-from"
+  mkdir -p "$cache"
+  if [ ! -d "$dest" ] || [ ! -f "$marker" ] || [ "$src" -nt "$marker" ]; then
+    rm -rf "$dest"
+    mkdir -p "$dest"
+    cp -R "$src/." "$dest/"
+    chmod -R u+rx "$dest" 2>/dev/null || true
+    touch "$marker"
+    say "  This drive cannot run programs directly. Running $name from $dest."
+    say "  Your library and models stay on this drive."
+  fi
+  printf '%s\n' "$dest"
+}
+materialize_symlinks() { # copy symlink targets into real files, deepest first (no symlinks left in the kit)
+  local list f target base
+  [ -d "$1" ] || return 0
+  list="$(find "$1" -type l 2>/dev/null | awk '{ print length($0) "\t" $0 }' | sort -nr | cut -f2-)"
+  [ -n "$list" ] || return 0
+  printf '%s\n' "$list" | while IFS= read -r f; do
+    [ -n "$f" ] && [ -L "$f" ] || continue
+    target="$(readlink "$f" 2>/dev/null || true)"
+    [ -n "$target" ] || { rm -f "$f"; continue; }
+    case "$target" in /*) ;; *) base="$(dirname "$f")"; target="$base/$target" ;; esac
+    if [ -d "$target" ]; then rm -f "$f"; mkdir -p "$f"; cp -R "$target/." "$f/"
+    elif [ -e "$target" ]; then rm -f "$f"; cp -f "$target" "$f"
+    else rm -f "$f"; fi
+  done
+}
+ensure_executable() { # ensure_executable <file>
+  [ -f "$1" ] || return 1
+  [ -x "$1" ] && return 0
+  chmod +x "$1" 2>/dev/null || true
+  [ -x "$1" ]
+}
 gb() { awk -v b="$1" 'BEGIN { if (b < 1e9) printf "%.0f MB", b / 1e6; else printf "%.1f GB", b / 1e9 }'; }
 ram_gb() {
   local b
@@ -262,9 +401,13 @@ catalog_field() { # catalog_field <id> <field number>
 }
 
 resolve_latest_zim() { # resolve_latest_zim <kiwix folder> <prefix>  -> newest file name
-  local dir="$1" prefix="$2" esc
+  # Accepts prefix_YYYY-MM.zim and prefix_YYYY-MMa.zim. Sort order is 2026-08 < 2026-08a < 2026-09.
+  # OFFLINE_AI_ZIM_LISTING = a saved listing, so tests do not touch the network.
+  local dir="$1" prefix="$2" esc html
   esc="$(printf '%s' "$prefix" | sed 's/[.]/\\./g')"
-  curl_text "$KIWIX_BASE/$dir/" | grep -oE "href=\"${esc}_[0-9]{4}-[0-9]{2}\.zim\"" |
+  if [ -n "${OFFLINE_AI_ZIM_LISTING:-}" ] && [ -f "$OFFLINE_AI_ZIM_LISTING" ]; then html="$(cat "$OFFLINE_AI_ZIM_LISTING")"
+  else html="$(curl_text "$KIWIX_BASE/$dir/")"; fi
+  printf '%s\n' "$html" | grep -oE "href=\"${esc}_[0-9]{4}-[0-9]{2}[a-z]?\.zim\"" |
     sed -e 's/^href="//' -e 's/"$//' | sort | tail -1
 }
 
@@ -375,7 +518,12 @@ get_zim() {
   url="$KIWIX_BASE/$dir/$file"
   sha="$(expected_sha "$url.sha256")"
   if [ -z "$sha" ]; then err "  Could not read the checksum for $file"; return 1; fi
-  if [ ! -f "$dest" ]; then download_resumable "$url" "$dest" 0 "$file" "$track" 1000 || return 1; fi
+  if [ ! -f "$dest" ]; then
+    local size
+    size="$(remote_size "$url")"
+    large_file_fits "$LIBRARY" "$size" "$file" || return 1
+    download_resumable "$url" "$dest" 0 "$file" "$track" 1000 || return 1
+  fi
   say "  Checking the file is complete and undamaged (SHA256)..."
   [ "$track" = yes ] && write_wiki_status verifying 0 0 99 0 "Checking SHA256 (10-30 minutes for Wikipedia)"
   got="$(sha256_of "$dest")"
@@ -392,7 +540,7 @@ get_zim() {
 }
 
 # ---------- processes ----------
-pid_file() { printf '%s/%s.mac.pid' "$LOG_DIR" "$1"; }
+pid_file() { printf '%s/%s.%s.pid' "$LOG_DIR" "$1" "${PID_TAG:-mac}"; }
 kit_pid() { # prints the pid if that kit process is running (and really is ours)
   local pf p comm want
   pf="$(pid_file "$1")"
@@ -400,7 +548,7 @@ kit_pid() { # prints the pid if that kit process is running (and really is ours)
   p="$(head -1 "$pf" 2>/dev/null)"
   [ -n "$p" ] && kill -0 "$p" 2>/dev/null || return 1
   comm="$(ps -p "$p" -o command= 2>/dev/null)"
-  case "$1" in kiwix) want=kiwix-serve ;; ollama) want=ollama ;; chat-server) want=serve-chat ;; add-libraries) want=add-libraries ;; *) want=wiki-download ;; esac
+  case "$1" in kiwix) want=kiwix-serve ;; ollama) want=ollama ;; chat-server) want=serve-chat ;; add-libraries) want=add-libraries ;; add-maps) want=add-maps ;; *) want=wiki-download ;; esac
   case "$comm" in *"$want"*) printf '%s\n' "$p"; return 0 ;; esac
   return 1
 }
@@ -422,15 +570,46 @@ stop_kit() {
   rm -f "$(pid_file "$1")"
 }
 
-ollama_bin() { [ -x "$OLLAMA_DIR/ollama" ] && printf '%s\n' "$OLLAMA_DIR/ollama"; }
-kiwix_bin()  { local f; for f in "$KIWIX_DIR"/*/kiwix-serve "$KIWIX_DIR"/kiwix-serve; do [ -x "$f" ] && { printf '%s\n' "$f"; return 0; }; done; return 1; }
+ollama_bin() {
+  local c staged
+  for c in "$OLLAMA_DIR/ollama" "$OLLAMA_DIR/bin/ollama"; do
+    [ -f "$c" ] || continue
+    if ensure_executable "$c"; then printf '%s\n' "$c"; return 0; fi
+  done
+  if [ -d "$OLLAMA_DIR" ] && { [ -f "$OLLAMA_DIR/ollama" ] || [ -f "$OLLAMA_DIR/bin/ollama" ]; }; then
+    staged="$(stage_program_tree "$OLLAMA_DIR" "ollama-${KIT_OS:-mac}")"
+    for c in "$staged/ollama" "$staged/bin/ollama"; do
+      [ -f "$c" ] || continue
+      chmod +x "$c" 2>/dev/null || true
+      if [ -x "$c" ]; then printf '%s\n' "$c"; return 0; fi
+    done
+  fi
+  return 1
+}
+kiwix_bin() {
+  local f staged found=""
+  for f in "$KIWIX_DIR"/*/kiwix-serve "$KIWIX_DIR"/kiwix-serve; do
+    [ -f "$f" ] || continue
+    if ensure_executable "$f"; then printf '%s\n' "$f"; return 0; fi
+    found="$f"
+  done
+  if [ -n "$found" ]; then
+    staged="$(stage_program_tree "$KIWIX_DIR" "kiwix-${KIT_OS:-mac}")"
+    for f in "$staged"/*/kiwix-serve "$staged"/kiwix-serve; do
+      [ -f "$f" ] || continue
+      chmod +x "$f" 2>/dev/null || true
+      if [ -x "$f" ]; then printf '%s\n' "$f"; return 0; fi
+    done
+  fi
+  return 1
+}
 
 start_ollama() {
   local bin
   if port_up "$OLLAMA_PORT"; then say "  AI model server already running on port $OLLAMA_PORT."; return 0; fi
   if [ "$USE_SYSTEM_OLLAMA" = yes ]; then warn "  USE_SYSTEM_OLLAMA is on, but nothing answers on port $OLLAMA_PORT. Start your Ollama app first."; return 1; fi
   if [ "$AI_AVAILABLE" != yes ]; then warn "  The AI part needs macOS 13 (Ventura) or newer; this Mac has macOS $MACOS_VER. The library still works."; return 1; fi
-  bin="$(ollama_bin)" || { err "  Ollama is missing. Run SETUP-MAC.command first."; return 1; }
+  bin="$(ollama_bin)" || { err "  Ollama is missing. Run $LAUNCH_SETUP first."; return 1; }
   ensure_dirs
   # Kit-only environment: models, keys and settings stay inside the kit folder.
   # OLLAMA_ORIGINS=* lets the chat page (opened as a local file) talk to it; it only listens on 127.0.0.1.
@@ -438,18 +617,18 @@ start_ollama() {
   # shellcheck disable=SC2086
   HOME="$HOME_DIR" OLLAMA_HOST="127.0.0.1:$OLLAMA_PORT" OLLAMA_MODELS="$MODELS_DIR" \
   OLLAMA_ORIGINS='*' OLLAMA_KEEP_ALIVE=10m \
-    nohup $ARCH_CMD "$bin" serve >> "$LOG_DIR/ollama-mac.log" 2>&1 < /dev/null &
+    nohup $ARCH_CMD "$bin" serve >> "$LOG_DIR/ollama-${LOG_TAG:-mac}.log" 2>&1 < /dev/null &
   printf '%s\n' "$!" > "$(pid_file ollama)"
   local i
   for i in $(seq 1 40); do port_up "$OLLAMA_PORT" && return 0; sleep 0.5; done
-  warn "  The AI server did not answer yet. See logs/ollama-mac.log"
+  warn "  The AI server did not answer yet. See logs/ollama-${LOG_TAG:-mac}.log"
   return 1
 }
 
 start_kiwix() { # (re)starts kiwix-serve with every verified ZIM
   local bin zims=() m i
   stop_kit kiwix
-  bin="$(kiwix_bin)" || { err "  Kiwix is missing. Run SETUP-MAC.command first."; return 1; }
+  bin="$(kiwix_bin)" || { err "  Kiwix is missing. Run $LAUNCH_SETUP first."; return 1; }
   for m in "$VERIFIED_DIR"/*.zim; do
     [ -e "$m" ] || continue
     [ -f "$LIBRARY/$(basename "$m")" ] && zims+=("$LIBRARY/$(basename "$m")")
@@ -459,19 +638,50 @@ start_kiwix() { # (re)starts kiwix-serve with every verified ZIM
   if port_up "$LIBRARY_PORT"; then err "  Port $LIBRARY_PORT is used by another program; the library cannot start."; return 1; fi
   local addr=127.0.0.1   # always private; with Share on Wi-Fi the chat page server passes library pages through
   # shellcheck disable=SC2086  # see start_ollama
-  nohup $ARCH_CMD "$bin" --address="$addr" --port="$LIBRARY_PORT" "${zims[@]}" >> "$LOG_DIR/kiwix-mac.log" 2>&1 < /dev/null &
+  nohup $ARCH_CMD "$bin" --address="$addr" --port="$LIBRARY_PORT" "${zims[@]}" >> "$LOG_DIR/kiwix-${LOG_TAG:-mac}.log" 2>&1 < /dev/null &
   printf '%s\n' "$!" > "$(pid_file kiwix)"
   for i in $(seq 1 30); do
     if port_up "$LIBRARY_PORT"; then say "  Library is serving ${#zims[@]} collection(s)."; return 0; fi
     sleep 0.5
   done
-  warn "  The library did not answer yet. See logs/kiwix-mac.log"
+  warn "  The library did not answer yet. See logs/kiwix-${LOG_TAG:-mac}.log"
+  warn_exfat_mmap
   return 1
+}
+warn_exfat_mmap() {
+  # macOS kiwix-serve maps a ZIM with mmap. Apple's exFAT driver returns Invalid argument past 4 GiB.
+  # Windows and Linux open the same files. Do not hide the ZIMs in a disk image; one drive must work everywhere.
+  [ "$(uname -s)" = Darwin ] || return 0
+  [ "${KIT_OS:-mac}" = mac ] || return 0
+  local t big=no f log hit=no
+  t="$(fs_type "$LIBRARY" | tr -cd 'a-z0-9')"
+  case "$t" in *exfat*|*fat32*|*vfat*|*msdos*) ;; *) return 0 ;; esac
+  for f in "$LIBRARY"/*.zim; do
+    [ -f "$f" ] || continue
+    if [ "$(file_size "$f")" -gt 4294967295 ]; then big=yes; break; fi
+  done
+  [ "$big" = yes ] || return 0
+  log="$LOG_DIR/kiwix-${LOG_TAG:-mac}.log"
+  if grep -qiE 'mmap|Invalid argument|Unable to add' "$log" 2>/dev/null; then hit=yes; fi
+  if ! port_up "$LIBRARY_PORT" || [ "$hit" = yes ]; then
+    warn "Large library or map files (over 4 GB) on an exFAT or FAT drive cannot be opened by kiwix-serve on a Mac."
+    warn "Windows and Linux can open those same files. On a Mac, keep files over 4 GB on APFS or the internal disk."
+    warn "Files under 4 GB on this drive still open."
+  fi
 }
 
 # ---------- Share on Wi-Fi ----------
-lan_ip() { # the address phones on the same Wi-Fi use to reach this Mac (IPv4), or nothing
+lan_ip() { # the address phones on the same Wi-Fi use to reach this computer (IPv4), or nothing
   local ifc="" ip=""
+  if [ "${KIT_OS:-mac}" = linux ]; then
+    # `ip route get` prints this computer's src address. Do not use the gateway.
+    if command -v ip >/dev/null 2>&1; then
+      ip="$(ip route get 1.1.1.1 2>/dev/null | grep -oE 'src[[:space:]]+[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+' | awk '{ print $2 }' | head -1)"
+    fi
+    case "$ip" in 127.*|169.254.*|0.*|"") return 1 ;; esac
+    printf '%s\n' "$ip"
+    return 0
+  fi
   ifc="$(route -n get default 2>/dev/null | awk '/interface:/ { print $2 }')"
   [ -n "$ifc" ] && ip="$(ipconfig getifaddr "$ifc" 2>/dev/null)"
   if [ -z "$ip" ]; then for ifc in en0 en1 en2 en3 en4 en5 en6 en7 en8; do ip="$(ipconfig getifaddr "$ifc" 2>/dev/null)" && [ -n "$ip" ] && break; done; fi
@@ -489,11 +699,16 @@ show_share_status() {
     ok "  Share on Wi-Fi: ON"
     if ip="$(lan_ip)"; then ok "    Phones and tablets on the same Wi-Fi open:  http://$ip:$CHAT_PORT/"; say "    (the chat page also shows a QR code to scan)"
     else warn "    No home network found right now (is Wi-Fi connected?)."; fi
-    say "    If a phone cannot connect and the Mac asks whether \"perl\" may accept incoming"
-    say "    connections, click Allow (System Settings > Network > Firewall)."
+    if [ "${KIT_OS:-mac}" = linux ]; then
+      say "    If a phone cannot connect, allow incoming connections for python3 on your home network."
+    else
+      say "    If a phone cannot connect and the Mac asks whether \"perl\" may accept incoming"
+      say "    connections, click Allow (System Settings > Network > Firewall)."
+    fi
     wifi_warning
   else
-    say "  Share on Wi-Fi: off (only this Mac can use the kit)"
+    if [ "${KIT_OS:-mac}" = linux ]; then say "  Share on Wi-Fi: off (only this computer can use the kit)"
+    else say "  Share on Wi-Fi: off (only this Mac can use the kit)"; fi
   fi
 }
 chat_server_cmd() { # prints which program runs the chat page server: perl (built into macOS) or python3
@@ -504,11 +719,19 @@ chat_server_cmd() { # prints which program runs the chat page server: perl (buil
   fi
   return 1
 }
-start_chat_server() { # the chat page over http on the home network (only used when Share on Wi-Fi is on)
+start_chat_server() { # the chat page over http (127.0.0.1, or the home network only when Share on Wi-Fi is on)
   local how i bind=127.0.0.1
   [ "$SHARE_ON_WIFI" = yes ] && bind=0.0.0.0
   if kit_pid chat-server >/dev/null; then say "  Chat page server already running."; return 0; fi
   if port_up "$CHAT_PORT"; then warn "  Port $CHAT_PORT is used by another program; phones cannot open the chat page."; return 1; fi
+  if [ "${KIT_OS:-mac}" = linux ]; then
+    if ! command -v python3 >/dev/null 2>&1; then warn "  python3 is not installed, so phones cannot open the chat page (the library still works)."; return 1; fi
+    nohup python3 "$MAC_DIR/serve-chat.py" --bind "$bind" --port "$CHAT_PORT" --www "$WWW_DIR" --logs "$LOG_DIR" --ollama-port "$OLLAMA_PORT" --library-port "$LIBRARY_PORT" >> "$LOG_DIR/chat-server-${LOG_TAG:-mac}.log" 2>&1 < /dev/null &
+    printf '%s\n' "$!" > "$(pid_file chat-server)"
+    for i in $(seq 1 30); do port_up "$CHAT_PORT" && return 0; sleep 0.3; done
+    warn "  The chat page server did not answer yet. See logs/chat-server-${LOG_TAG:-mac}.log"
+    return 1
+  fi
   how="$(chat_server_cmd)" || { warn "  Neither perl nor python3 is available, so phones cannot open the chat page (the library still works)."; return 1; }
   if [ "$how" = perl ]; then
     nohup perl "$MAC_DIR/serve-chat.pl" --bind "$bind" --port "$CHAT_PORT" --www "$WWW_DIR" --logs "$LOG_DIR" --ollama-port "$OLLAMA_PORT" --library-port "$LIBRARY_PORT" >> "$LOG_DIR/chat-server-mac.log" 2>&1 < /dev/null &
@@ -535,16 +758,21 @@ set_share_on_wifi() { # set_share_on_wifi yes|no [apply]
 # ---------- Extra Libraries (catalog/extra-libraries.txt) ----------
 extra_catalog() { [ -f "$EXTRA_CATALOG_FILE" ] && tr -d '\r' < "$EXTRA_CATALOG_FILE" | grep -vE '^[[:space:]]*(#|$)'; }
 extra_field() { extra_catalog | awk -F'|' -v id="$1" -v f="$2" '$1 == id { print $f }'; }
-extra_installed() { # extra_installed <id> -> prints the verified file name
-  local prefix f b
-  prefix="$(extra_field "$1" 3)"; [ -n "$prefix" ] || return 1
+prefix_installed() { # prefix_installed <prefix> -> verified file name (YYYY-MM or YYYY-MMa)
+  local prefix="$1" f b rest
+  [ -n "$prefix" ] || return 1
   for f in "$VERIFIED_DIR/${prefix}"_*.zim; do
     [ -e "$f" ] || continue
     b="$(basename "$f")"
-    case "${b#"${prefix}"_}" in [0-9][0-9][0-9][0-9]-[0-9][0-9].zim) [ -f "$LIBRARY/$b" ] && { printf '%s\n' "$b"; return 0; } ;; esac
+    rest="${b#"${prefix}"_}"
+    case "$rest" in
+      [0-9][0-9][0-9][0-9]-[0-9][0-9].zim|[0-9][0-9][0-9][0-9]-[0-9][0-9][a-z].zim)
+        [ -f "$LIBRARY/$b" ] && { printf '%s\n' "$b"; return 0; } ;;
+    esac
   done
   return 1
 }
+extra_installed() { prefix_installed "$(extra_field "$1" 3)"; }
 size_label() { awk -v g="$1" 'BEGIN { if (g < 1) printf "%.0f MB", g * 1000; else printf "%.1f GB", g }'; }
 show_extra_catalog() {
   local n=0 id gb about mark
@@ -586,7 +814,166 @@ install_extra() { # install_extra <id>: fastest mirror + resume + SHA-256 + VERI
   if [ "$size" -gt 0 ] && [ "$free" -lt $((size - part + 2000000000)) ]; then
     err "    Not enough free space: needs $(gb $((size - part))), only $(gb "$free") free on this drive. Skipped."; return 1
   fi
+  if [ "$size" -ge 4294967296 ] || awk -v g="$(extra_field "$id" 4)" 'BEGIN { exit !(g+0 >= 4) }'; then
+    fat32_blocked "$LIBRARY" && { err "    This drive is FAT32, which cannot store a file larger than 4 GB. $about needs exFAT, NTFS, or APFS. Skipped."; return 1; }
+  fi
   get_zim "$dir" "$file" no
+}
+
+# ---------- Offline maps (catalog/maps.txt). Same download path as Extra Libraries. ----------
+map_catalog() { [ -f "$MAPS_CATALOG_FILE" ] && tr -d '\r' < "$MAPS_CATALOG_FILE" | grep -vE '^[[:space:]]*(#|$)'; }
+map_field() { map_catalog | awk -F'|' -v id="$1" -v f="$2" '$1 == id { print $f }'; }
+show_map_catalog() {
+  local n=0 id gb about mark
+  while IFS='|' read -r id _ _ gb _ about; do
+    n=$((n + 1)); mark="   "; prefix_installed "$(map_field "$id" 3)" >/dev/null && mark="[x]"
+    printf '  %2d) %s %-20s %9s  %s\n' "$n" "$mark" "$id" "$(size_label "$gb")" "$about"
+  done <<EOF_MAP
+$(map_catalog)
+EOF_MAP
+  say '  [x] = already added. Vancouver Island, British Columbia and Alberta share one Canada file (counted once).'
+  say '  "all" downloads every different map file in this list.'
+}
+resolve_map_ids() { # "1,3" / "alberta europe" / "all" -> ids, one per line
+  local tok out="" id total
+  total="$(map_catalog | wc -l | tr -d ' ')"
+  [ -n "$total" ] || total=0
+  for tok in $(printf '%s' "$1" | tr ',' ' ' | tr 'A-Z' 'a-z'); do
+    if [ "$tok" = all ]; then map_catalog | awk -F'|' '{ print $1 }'; return 0; fi
+    case "$tok" in
+      *[!0-9]*) id="$(map_field "$tok" 1)"; [ -n "$id" ] || { warn "  (Unknown map '$tok' - skipped)" >&2; continue; } ;;
+      *) if [ "$tok" -ge 1 ] && [ "$tok" -le "$total" ]; then id="$(map_catalog | sed -n "${tok}p" | cut -d'|' -f1)"; else warn "  (No number $tok in the list - skipped)" >&2; continue; fi ;;
+    esac
+    case " $out " in *" $id "*) ;; *) out="$out $id" ;; esac
+  done
+  for id in $out; do printf '%s\n' "$id"; done
+}
+map_unique_ids() { # ids on the command line -> one id per file prefix (first wins)
+  local id seen="" prefix
+  for id in "$@"; do
+    [ -n "$id" ] || continue
+    prefix="$(map_field "$id" 3)"
+    [ -n "$prefix" ] || continue
+    case " $seen " in *" $prefix "*) ;; *) seen="$seen $prefix"; printf '%s\n' "$id" ;; esac
+  done
+}
+map_gb() { # total GB still to download, shared prefixes counted once
+  local id total=0 g
+  for id in $(map_unique_ids "$@"); do
+    prefix_installed "$(map_field "$id" 3)" >/dev/null && continue
+    g="$(map_field "$id" 4)"; total="$(awk -v a="$total" -v b="${g:-0}" 'BEGIN { printf "%.2f", a + b }')"
+  done
+  printf '%s\n' "$total"
+}
+install_map() { # install_map <id>
+  local id="$1" dir prefix about file have url size part free gb
+  if have="$(prefix_installed "$(map_field "$id" 3)")"; then ok "  Already added: $(map_field "$id" 6) ($have)"; return 0; fi
+  dir="$(map_field "$id" 2)"; prefix="$(map_field "$id" 3)"; about="$(map_field "$id" 6)"; gb="$(map_field "$id" 4)"
+  if awk -v g="${gb:-0}" 'BEGIN { exit !(g+0 >= 4) }' && fat32_blocked "$LIBRARY"; then
+    err "    This drive is FAT32, which cannot store a file larger than 4 GB. $about needs exFAT, NTFS, or APFS. Skipped."; return 1
+  fi
+  file="$(resolve_latest_zim "$dir" "$prefix")"
+  [ -n "$file" ] || { err "  Could not find $prefix on download.kiwix.org (no internet?)"; return 1; }
+  url="$KIWIX_BASE/$dir/$file"; size="$(remote_size "$url")"; part="$(file_size "$LIBRARY/$file.part")"
+  free="$(free_bytes "$LIBRARY")"
+  say "  - $about: $file ($(gb "$size"))"
+  if [ "$size" -gt 0 ] && [ "$free" -lt $((size - part + 2000000000)) ]; then
+    err "    Not enough free space: needs $(gb $((size - part))), only $(gb "$free") free on this drive. Skipped."; return 1
+  fi
+  get_zim "$dir" "$file" no
+}
+write_maps_index() {
+  local id file about first=yes
+  {
+    printf 'window.KIT_MAPS = [\n'
+    while IFS='|' read -r id _ prefix _ _ about; do
+      [ -n "$id" ] || continue
+      file="$(prefix_installed "$prefix" 2>/dev/null || true)"
+      [ -n "$file" ] || continue
+      about="$(json_escape "$about")"
+      [ "$first" = yes ] || printf ',\n'
+      first=no
+      printf '  { id: "%s", file: "%s", about: "%s" }' "$id" "$file" "$about"
+    done <<EOF_IDX
+$(map_catalog)
+EOF_IDX
+    printf '\n];\n'
+  } > "$WWW_DIR/maps-index.js" 2>/dev/null || true
+}
+make_linux_desktop() {
+  local d="${XDG_DESKTOP_DIR:-$HOME/Desktop}" f
+  [ -d "$d" ] || return 0
+  f="$d/offline-ai-kit.desktop"
+  if printf '[Desktop Entry]\nType=Application\nName=Offline AI\nComment=Start the Offline AI Kit\nExec=bash "%s/%s"\nPath=%s\nTerminal=true\nCategories=Utility;\n' "$KIT" "$LAUNCH_START" "$KIT" > "$f" 2>/dev/null; then
+    chmod +x "$f" 2>/dev/null || true
+    ok "  Put an 'Offline AI' shortcut on the Desktop."
+  else
+    warn "  Could not create the Desktop shortcut (not a problem; use bash \"$KIT/$LAUNCH_START\")."
+  fi
+}
+
+# ---------- Which Kiwix / Ollama build to unpack ----------
+install_kiwix_tools() {
+  local rel kfile want pattern label
+  rel="$KIWIX_BASE/release/kiwix-tools/"
+  if [ "${KIT_OS:-mac}" = linux ]; then
+    if [ "$LINUX_LIBC" = musl ]; then pattern="kiwix-tools_linux-${LINUX_KIWIX_ARCH}-musl-[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9]+)?\\.tar\\.gz"
+    else pattern="kiwix-tools_linux-${LINUX_KIWIX_ARCH}-[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9]+)?\\.tar\\.gz"; fi
+    label="Linux $LINUX_KIWIX_ARCH $LINUX_LIBC"
+  else
+    pattern="kiwix-tools_macos-${KIWIX_ARCH}-[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9]+)?\\.tar\\.gz"
+    label="macOS $KIWIX_ARCH"
+  fi
+  say "[1/4] Library program (kiwix-tools for $label)..."
+  if kiwix_bin >/dev/null; then ok "  Already installed."; return 0; fi
+  kfile="$(curl_text "$rel" | grep -oE "href=\"${pattern}\"" | sed -e 's/^href="//' -e 's/"$//' |
+    awk '{ v = $0
+           if (match(v, /[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?\.tar\.gz$/)) {
+             ver = substr(v, RSTART, RLENGTH); sub(/\.tar\.gz$/, "", ver); gsub(/-/, ".", ver)
+             n = split(ver, p, ".")
+             printf "%05d%05d%05d%05d %s\n", p[1], p[2], p[3], (n > 3 ? p[4] : 0), $0
+           } }' | sort | tail -1 | awk '{ print $2 }')"
+  if [ -z "$kfile" ]; then err "Could not find kiwix-tools for $label on download.kiwix.org"; return 1; fi
+  say "  Downloading $kfile"
+  download_resumable "$rel$kfile" "$RUNTIME/$kfile" 0 "$kfile" no 20 || return 1
+  want="$(curl_text "$rel$kfile.md5" | awk '{ print $1 }')"
+  if [ "$(md5_of "$RUNTIME/$kfile")" != "$want" ]; then rm -f "$RUNTIME/$kfile"; err "kiwix-tools download was damaged (checksum mismatch). Run setup again."; return 1; fi
+  mkdir -p "$KIWIX_DIR"
+  tar -xzf "$RUNTIME/$kfile" -C "$KIWIX_DIR" 2>/dev/null || tar -xzf "$RUNTIME/$kfile" -C "$KIWIX_DIR"
+  rm -f "$RUNTIME/$kfile"
+  materialize_symlinks "$KIWIX_DIR"
+  command -v xattr >/dev/null 2>&1 && xattr -dr com.apple.quarantine "$KIWIX_DIR" 2>/dev/null || true
+  ok "  Installed."
+}
+install_portable_ollama() {
+  local asset base want
+  if [ "${KIT_OS:-mac}" = linux ]; then say "[2/4] AI program (Ollama for Linux, portable)..."
+  else say "[2/4] AI program (Ollama for macOS, portable)..."; fi
+  if [ "$USE_SYSTEM_OLLAMA" = yes ]; then say "  Using your own Ollama on port $OLLAMA_PORT (USE_SYSTEM_OLLAMA) - not downloading one."; return 0; fi
+  if [ "${KIT_OS:-mac}" != linux ] && [ "$AI_AVAILABLE" != yes ]; then warn "  Skipped: needs macOS 13 (Ventura) or newer (this Mac has $MACOS_VER)."; return 0; fi
+  if ollama_bin >/dev/null; then ok "  Already installed."; return 0; fi
+  if [ "${KIT_OS:-mac}" = linux ]; then
+    asset="$LINUX_OLLAMA_ASSET"
+    base="https://github.com/ollama/ollama/releases/latest/download/"
+  else
+    asset="ollama-darwin.tgz"
+    if [ "$OLLAMA_CHANNEL" = pinned ]; then base="https://github.com/ollama/ollama/releases/download/$OLLAMA_PIN_VERSION/"
+    else base="https://github.com/ollama/ollama/releases/latest/download/"; fi
+  fi
+  download_resumable "$base$asset" "$RUNTIME/$asset" 0 "$asset" no 20 || return 1
+  want="$(curl_text "${base}sha256sum.txt" | tr -d '\r' | awk -v a="$asset" '$2 == a || $2 == "./" a { print $1 }')"
+  if [ -z "$want" ]; then err "Could not read the Ollama checksum list."; return 1; fi
+  if [ "${KIT_OS:-mac}" != linux ] && [ "$OLLAMA_CHANNEL" = pinned ] && [ "$want" != "$OLLAMA_PIN_SHA256" ]; then
+    rm -f "$RUNTIME/$asset"; err "The Ollama $OLLAMA_PIN_VERSION checksum online does not match the one built into this kit. Not installing it."; return 1
+  fi
+  if [ "$(sha256_of "$RUNTIME/$asset")" != "$want" ]; then rm -f "$RUNTIME/$asset"; err "Ollama download was damaged (checksum mismatch). Run setup again."; return 1; fi
+  mkdir -p "$OLLAMA_DIR"
+  tar -xzf "$RUNTIME/$asset" -C "$OLLAMA_DIR" 2>/dev/null || tar -xzf "$RUNTIME/$asset" -C "$OLLAMA_DIR"
+  rm -f "$RUNTIME/$asset"
+  materialize_symlinks "$OLLAMA_DIR"
+  command -v xattr >/dev/null 2>&1 && xattr -dr com.apple.quarantine "$OLLAMA_DIR" 2>/dev/null || true
+  ollama_bin >/dev/null || { err "Ollama did not unpack as expected."; return 1; }
+  ok "  Installed."
 }
 
 # ---------- Check for updates (only when asked; needs internet; never downloads or changes anything) ----------
@@ -619,7 +1006,10 @@ update_check() {
   say  "UPDATE CHECK: UPDATE AVAILABLE v$latest"
 }
 
-open_url() { if command -v open >/dev/null 2>&1; then open "$1" 2>/dev/null || true; else say "  Open: $1"; fi; }
+open_url() {
+  if [ "${KIT_OS:-mac}" = linux ] && command -v xdg-open >/dev/null 2>&1; then xdg-open "$1" >/dev/null 2>&1 || true; return 0; fi
+  if command -v open >/dev/null 2>&1; then open "$1" 2>/dev/null || true; else say "  Open: $1"; fi
+}
 
 pause_exit() { # keep a double-clicked Terminal window readable
   local code="${1:-0}"

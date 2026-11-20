@@ -1,1 +1,1 @@
-window.KIT_VERSION = "1.1.0";
+window.KIT_VERSION = "1.2.0";

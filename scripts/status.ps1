@@ -1,5 +1,5 @@
 # Shows what is running and how the Wikipedia download is going, then offers a small menu:
-# Share on Wi-Fi on/off, add Extra Libraries, check for updates.
+# Share on Wi-Fi on/off, add Extra Libraries, add offline maps, check for updates.
 #   status.ps1 -Once                 (just the status, no menu)
 #   status.ps1 -ShareWifi on|off     (turn Share on Wi-Fi on or off and apply it now)
 #   status.ps1 -CheckUpdates         (ask GitHub for a newer version; needs internet)
@@ -52,14 +52,16 @@ while ($true) {
   Write-Host 'What would you like to do?'
   Write-Host "  1) Turn Share on Wi-Fi $(if ($ShareOnWifi) { 'OFF' } else { 'ON' })   (now: $state - lets phones/tablets on your home Wi-Fi use the kit)"
   Write-Host '  2) Add Extra Libraries   (Wiktionary, Project Gutenberg, Stack Exchange Q&A, preparedness guides...)'
-  Write-Host '  3) Check for updates     (needs internet; nothing is downloaded or changed)'
-  Write-Host '  4) Show the status again'
-  $c = Read-Host 'Type 1-4, or just press Enter to close'
+  Write-Host '  3) Add offline maps      (Vancouver Island / BC / Alberta, and broader regions)'
+  Write-Host '  4) Check for updates     (needs internet; nothing is downloaded or changed)'
+  Write-Host '  5) Show the status again'
+  $c = Read-Host 'Type 1-5, or just press Enter to close'
   switch ($c.Trim()) {
     '1' { Switch-Share (-not $ShareOnWifi) }
     '2' { & (Join-Path $PSScriptRoot 'add-libraries.ps1') }
-    '3' { Write-Host ''; $null = Invoke-UpdateCheck }
-    '4' { Write-Host ''; Show-Status }
+    '3' { & (Join-Path $PSScriptRoot 'add-maps.ps1') }
+    '4' { Write-Host ''; $null = Invoke-UpdateCheck }
+    '5' { Write-Host ''; Show-Status }
     default { exit 0 }
   }
 }

@@ -3,7 +3,7 @@
 $ErrorActionPreference = 'Continue'
 Ensure-Dirs
 Write-Host 'Stopping the Offline AI Kit...'
-foreach ($n in @('kiwix','ollama','chat-server','wikipedia-download')) { Stop-KitProcess $n }
+foreach ($n in @('kiwix','ollama','chat-server','add-libraries','add-maps','wikipedia-download')) { Stop-KitProcess $n }
 # Any curl the Wikipedia downloader left behind (only ones writing into this kit's library).
 try {
   Get-CimInstance Win32_Process -Filter "Name='curl.exe'" -ErrorAction Stop |
