@@ -1,11 +1,12 @@
 # Offline AI Kit – Advanced options
 
-For people comfortable with a terminal. Normal users: use **EASY-INSTALL** or **SETUP** (see README.md).
+For people comfortable with a terminal. Normal users: open **`Click these`** (see README.md and `FOLDER-GUIDE.txt`).
 
-## Three ways to install
+## Four ways to install
 
 | Version | Windows | Mac | Linux | What it does |
 |---|---|---|---|---|
+| **Guided** | `Click these/1 Install - guided/Windows.bat` | `Click these/1 Install - guided/Mac.command` | `bash "Click these/1 Install - guided/Linux.sh"` | Browser page on 127.0.0.1. Explains every choice, then runs the setup below with the answers filled in (`-Yes` / `--yes` plus the flags, including `-NoShareWifi` or `--no-share-wifi`, and `-ThisComputer` or `--this-computer`). Nothing downloads until Install is pressed. |
 | **Easy** | `EASY-INSTALL (Windows).bat` | `EASY-INSTALL (Mac).command` (Apple chip and Intel) | `bash "EASY-INSTALL (Linux).sh"` | No questions. Detects memory, graphics card and free disk space, picks a hardware profile, installs into the kit folder, adds an **Offline AI** shortcut to the Desktop, starts the kit and opens the browser. If the disk is short it drops to a smaller profile and/or skips Wikipedia instead of failing. Maps are not downloaded. |
 | **Setup Wizard** | `SETUP.bat` | `SETUP-MAC.command` | `bash SETUP-LINUX.sh` | Folder, then 8 steps: AI model size (suggested from the hardware), core library tier, full Wikipedia yes/no, Extra Libraries, Share on Wi-Fi, optional offline maps, this computer or all computers (universal drive), and a summary (download size vs free space, including the extra program space) with `Proceed? (Y/N)`. Nothing downloads before that. Choices are saved in `kit-settings.ini`. |
 | **Advanced** | `scripts\setup.ps1` with options | `mac/setup.sh` with options | `linux/setup.sh` (same wizard; sets `OFFLINE_AI_OS=linux`) | Everything below, plus `kit-settings.ini`. |
@@ -87,9 +88,11 @@ powershell -ExecutionPolicy Bypass -File scripts\setup.ps1 [options]
   -Test                     quick test install (see Test mode)
   -DetectOnly               only show the hardware check and chosen profile
   -ShareWifi                turn on Share on Wi-Fi (saved as SHARE_ON_WIFI=1)
+  -NoShareWifi              turn Share on Wi-Fi off (the guided installer passes this when the box is left off)
   -ExtraLibraries id,id     also download these Extra Libraries (ids or numbers from the list, or "all")
   -Maps id,id               also download these offline maps (ids or numbers from catalog\maps.txt, or "all")
   -Universal                also download programs for Windows, Mac (both chips) and Linux (x64 and ARM)
+  -ThisComputer             this computer only (skips the "which computers" question)
 ```
 
 Any option given on the command line skips that wizard question. `-Easy` (and `-Yes`) never ask anything.
@@ -104,7 +107,7 @@ bash mac/setup.sh [options]
   --models lite|8|16|24|32   or  --models "qwen3.5:9b,llama3.2:3b"
   --zims id,id  --path /Volumes/SSD/OfflineAI  --skip-wikipedia  --with-wikipedia
   --use-system-ollama  --no-start  --yes  --test  --detect-only
-  --share-wifi  --extra-libraries id,id|all  --maps id,id|all  --universal
+  --share-wifi  --no-share-wifi  --extra-libraries id,id|all  --maps id,id|all  --universal  --this-computer
 ```
 
 Linux is the same wizard: `bash linux/setup.sh` (or `bash SETUP-LINUX.sh`). It downloads

@@ -1,0 +1,4 @@
+Use this after the kit is installed.
+
+It starts the chat and the library and opens your web browser.
+The chat page has a button called Emergency first aid.

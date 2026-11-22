@@ -126,7 +126,7 @@ check("resolver accepts a letter suffix in bash", /\[0-9\]\{4\}-\[0-9\]\{2\}\[a-
 check("FAT32 names are refused in both libraries", /fat32/.test(read("scripts/common.ps1")) && /vfat/.test(read("scripts/common.ps1")) && /msdos/.test(read("scripts/common.ps1")) && /fat32\|vfat\|msdos/.test(read("mac/lib.sh")));
 check("exFAT mmap limit is explained for macOS", /mmap/.test(read("mac/lib.sh")) && /4 GB/.test(read("README.md")) && /exFAT/.test(read("START-HERE.txt")));
 check("USB section is in the README and START-HERE", /Running from a USB drive/.test(read("README.md")) && /RUNNING FROM A USB DRIVE/.test(read("START-HERE.txt")));
-check("version is 1.3.0", read("VERSION").trim() === "1.3.0" && /"1\.3\.0"/.test(read("www/version.js")));
+check("version is 1.4.0", read("VERSION").trim() === "1.4.0" && /"1\.4\.0"/.test(read("www/version.js")));
 
 const vm = require("vm");
 const html = read("www/maps.html");

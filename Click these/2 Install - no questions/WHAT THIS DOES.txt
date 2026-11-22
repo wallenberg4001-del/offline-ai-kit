@@ -1,0 +1,6 @@
+This installs the kit with good choices for this computer.
+
+There are no questions. It includes Wikipedia when the drive has room.
+It does not turn on phones, and it does not download maps.
+
+Double-click the file for your computer (Windows, Mac, or Linux).

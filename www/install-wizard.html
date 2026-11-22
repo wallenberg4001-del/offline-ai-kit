@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install Offline AI Kit</title>
+<style>
+  :root { --bg: #12140f; --ink: #f4f6ee; --muted: #c5cbb6; --line: #3a4032; --card: #1c2118; --accent: #c8e27a; --warn: #e6c07b; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 18px/1.45 "Segoe UI", -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif; }
+  body { max-width: 44rem; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0 0 12px; }
+  p { margin: 0 0 12px; }
+  .progress { color: var(--muted); font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
+  .facts { margin: 8px 0 0; padding-left: 18px; }
+  .facts li { margin: 6px 0; }
+  .warn { color: var(--warn); }
+  .ok { color: var(--accent); font-weight: 650; }
+  .cards { display: flex; flex-direction: column; gap: 10px; }
+  button.choice, button.primary, button.secondary {
+    font: inherit; border-radius: 12px; cursor: pointer; text-align: left;
+  }
+  button.choice { background: #141810; color: var(--ink); border: 2px solid var(--line); padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+  button.choice.on { border-color: var(--accent); background: #24301a; }
+  button.choice strong { font-size: 20px; }
+  button.choice .detail { color: var(--muted); font-size: 16px; }
+  .tag { display: inline-block; background: var(--accent); color: #1a1f0f; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 2px 8px; margin: 0 0 4px; letter-spacing: 0.02em; }
+  label.check { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; }
+  label.check input { width: 22px; height: 22px; margin-top: 2px; accent-color: var(--accent); }
+  .nav { display: flex; gap: 10px; margin-top: 14px; }
+  button.primary, button.secondary { padding: 12px 16px; font-weight: 700; }
+  button.primary { background: var(--accent); color: #1a1f0f; border: 0; }
+  button.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  pre.log { white-space: pre-wrap; word-break: break-word; background: #0d100c; color: #d5dcc8; border-radius: 10px; padding: 12px; max-height: 50vh; overflow: auto; font: 13px/1.4 ui-monospace, Menlo, Consolas, monospace; }
+  .live { color: var(--muted); font-size: 16px; }
+</style>
+</head>
+<body>
+<main id="wizard">Looking at this computer…</main>
+<script src="install-wizard.js"></script>
+</body>
+</html>

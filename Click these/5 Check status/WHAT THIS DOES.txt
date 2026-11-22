@@ -1,0 +1,4 @@
+This shows whether the kit is running, and lets you change it.
+
+You can turn phones on your home Wi-Fi on or off, add extra libraries,
+add offline maps, or check whether a newer version of the kit exists.

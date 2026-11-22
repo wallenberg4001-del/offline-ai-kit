@@ -6,12 +6,12 @@
 # Power-user options (see ADVANCED.md): --profile lite|standard|large|largest|intel|intel-small  --tier essentials|recommended
 #   --models lite|8|16|24|32|"name,name"  --zims id,id  --path DIR  --skip-wikipedia  --with-wikipedia
 #   --use-system-ollama  --no-start  --yes  --test (quick test install, see ADVANCED.md)
-#   --share-wifi  --extra-libraries id,id|all  --maps id,id|all  --universal
+#   --share-wifi  --no-share-wifi  --extra-libraries id,id|all  --maps id,id|all  --universal  --this-computer
 # Linux: linux/setup.sh sets OFFLINE_AI_OS=linux and runs this same wizard.
 # shellcheck source=lib.sh
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
-DETECT=no; TEST=no; TIER=""; MODELS=""; YES=no; EASY=no; HWPROFILE=""; ZIMS=""; INSTALL_PATH=""; SKIPW=no; WITHW=no; SYSOLL=no; NOSTART=no; SHAREW=no; EXTRAS=""; MAPS=""; UNIVERSAL=no; UNIVERSAL_FLAG=no; PERSIST_SYSTEM_OLLAMA=no
+DETECT=no; TEST=no; TIER=""; MODELS=""; YES=no; EASY=no; HWPROFILE=""; ZIMS=""; INSTALL_PATH=""; SKIPW=no; WITHW=no; SYSOLL=no; NOSTART=no; SHAREW=no; NOSHARE=no; EXTRAS=""; MAPS=""; UNIVERSAL=no; UNIVERSAL_FLAG=no; THISCOMPUTER=no; PERSIST_SYSTEM_OLLAMA=no
 ORIG_ARGS=("$@")
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -29,9 +29,11 @@ while [ $# -gt 0 ]; do
     --no-start) NOSTART=yes ;;
     --yes) YES=yes ;;
     --share-wifi) SHAREW=yes ;;
+    --no-share-wifi) NOSHARE=yes ;;
     --extra-libraries) EXTRAS="${2:-}"; shift ;;
     --maps) MAPS="${2:-}"; shift ;;
     --universal) UNIVERSAL=yes; UNIVERSAL_FLAG=yes ;;
+    --this-computer) THISCOMPUTER=yes ;;
     *) warn "Unknown option: $1 (see ADVANCED.md)" ;;
   esac
   shift
@@ -105,7 +107,7 @@ if [ "$TARGET" != "$KIT" ]; then
 fi
 if [ "$TARGET" != "$KIT" ]; then
   say "Copying the kit files to $TARGET ..."
-  for item in mac linux scripts www catalog VERSION SETUP-MAC.command "EASY-INSTALL (Mac).command" START-OFFLINE-AI-MAC.command STOP-OFFLINE-AI-MAC.command \
+  for item in mac linux scripts www catalog "Click these" FOLDER-GUIDE.txt VERSION SETUP-MAC.command "EASY-INSTALL (Mac).command" START-OFFLINE-AI-MAC.command STOP-OFFLINE-AI-MAC.command \
               STATUS-MAC.command SETUP-LINUX.sh "EASY-INSTALL (Linux).sh" START-OFFLINE-AI-LINUX.sh STOP-OFFLINE-AI-LINUX.sh STATUS-LINUX.sh \
               SETUP.bat "EASY-INSTALL (Windows).bat" START-OFFLINE-AI.bat STOP-OFFLINE-AI.bat STATUS.bat README.md \
               START-HERE.txt ADVANCED.md README-OUTAGE.txt kit-settings.example.ini kit-settings.ini LICENSE; do
@@ -122,6 +124,7 @@ if [ "$TEST" = yes ] || is_yes "${OFFLINE_AI_TEST:-no}"; then enable_test_mode; 
 [ "$TEST_MODE" = yes ] && warn "TEST MODE: tiny library, one small model, 13 MB Wikipedia stand-in. Delete kit-settings.ini (or set TEST_MODE=no) to leave test mode."
 # Make double-clicking work later: executable bits + remove the "downloaded from internet" flag.
 chmod +x "$KIT"/*.command "$KIT"/mac/*.sh "$KIT"/linux/*.sh "$KIT"/*.sh 2>/dev/null || true
+find "$KIT/Click these" -type f \( -name '*.command' -o -name '*.sh' \) -exec chmod +x {} + 2>/dev/null || true
 command -v xattr >/dev/null 2>&1 && xattr -dr com.apple.quarantine "$KIT" 2>/dev/null || true
 if ! exec_bits_stick; then
   warn "This drive does not let programs run directly (common on exFAT)."
@@ -251,10 +254,12 @@ else
   # Step 5: share on Wi-Fi
   step 5 "Share on home Wi-Fi (phones and tablets)"
   say "  Lets phones and tablets on the same Wi-Fi use the chat and library. Trusted home Wi-Fi only."
-  if [ "$SHAREW" != yes ]; then
+  if [ "$SHAREW" = yes ]; then say "  Chosen on the command line: ON"
+  elif [ "$NOSHARE" = yes ]; then SHARE_CHOICE=no; say "  Chosen on the command line: off"
+  else
     DEF_S=N; [ "$SHARE_ON_WIFI" = yes ] && DEF_S=Y
     case "$(ask 'Turn on Share on Wi-Fi? (Y/N)' "$DEF_S")" in [Yy]*) SHARE_CHOICE=yes ;; *) SHARE_CHOICE=no ;; esac
-  else say "  Chosen on the command line: ON"; fi
+  fi
   [ "$SHARE_CHOICE" = yes ] && wifi_warning
 
   # Step 6: optional offline maps. Easy Install never reaches this (maps stay off unless --maps was passed).
@@ -285,6 +290,9 @@ else
   if [ "$UNIVERSAL_FLAG" = yes ]; then
     say "  Chosen on the command line: All computers (universal drive)"
     UNIVERSAL=yes
+  elif [ "$THISCOMPUTER" = yes ]; then
+    say "  Chosen on the command line: This computer only"
+    UNIVERSAL=no
   else
     DEF_U=1; is_yes "$(setting UNIVERSAL no)" && DEF_U=2
     case "$(ask 'Type 1 or 2:' "$DEF_U")" in

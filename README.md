@@ -6,9 +6,25 @@ A chat assistant (AI) and a big reference library – including all of Wikipedia
 
 It also has a **built-in hardware detector**. On launch it checks your RAM, graphics card, and free disk space, then automatically picks the right AI model sizes, library, and settings to fit *your* machine – from a lightweight laptop up to a 32 GB gaming rig. No manual tuning needed.
 
+## Where to click
+
+Open the folder **`Click these`**. The numbered folders are the whole kit, in the order you need them:
+
+| Folder | What it does |
+|---|---|
+| **1 Install - guided** | A page in your web browser. It explains every choice in plain language, then downloads. Best the first time. |
+| **2 Install - no questions** | Installs with good choices for your computer. No questions. |
+| **3 Start** | Opens the chat and the library. Use this after it is installed. |
+| **4 Stop** | Turns it off. |
+| **5 Check status** | Phones on Wi-Fi, extra libraries, maps, and updates. |
+
+`FOLDER-GUIDE.txt` says what every other folder is, and which ones not to delete. Pick the file inside the folder that matches your computer (Windows, Mac, or Linux).
+
+The files at the top of the kit (`EASY-INSTALL`, `SETUP`, `START-OFFLINE-AI`, `STOP`, `STATUS`) do the same jobs. They stay so older notes and the Desktop shortcut still work.
+
 ## 👉 Which one do I need?
 
-There is **one file to double-click**. Pick the line that matches your computer:
+There is **one file to double-click** if you do not want to open `Click these`. Pick the line that matches your computer:
 
 | Your computer | Double-click this file | Notes |
 |---|---|---|
@@ -17,12 +33,15 @@ There is **one file to double-click**. Pick the line that matches your computer:
 | 🍏 **Older Mac with an Intel chip** | **the same `EASY-INSTALL (Mac).command`** | It works out which Mac you have by itself. The AI answers more slowly on Intel Macs. |
 | 🐙 **Linux** | **`EASY-INSTALL (Linux).sh`** | In a terminal: `bash "EASY-INSTALL (Linux).sh"`. No questions. |
 
-### Two ways to install – pick one
+### Three ways to install – pick one
 
 | I want… | Windows | Mac (Apple chip or Intel) | Linux |
 |---|---|---|---|
+| 🧭 **Every choice explained** (guided installer) | **`Click these/1 Install - guided/Windows.bat`** | **`Click these/1 Install - guided/Mac.command`** | **`bash "Click these/1 Install - guided/Linux.sh"`** |
 | ⚡ **No questions** – just set it up with good choices for my computer | **`EASY-INSTALL (Windows).bat`** | **`EASY-INSTALL (Mac).command`** | **`EASY-INSTALL (Linux).sh`** |
-| 🧭 **To choose my features** step by step (Setup Wizard) | **`SETUP.bat`** | **`SETUP-MAC.command`** | **`SETUP-LINUX.sh`** |
+| ⌨️ **The same choices, in a text window** | **`SETUP.bat`** | **`SETUP-MAC.command`** | **`SETUP-LINUX.sh`** |
+
+**The guided installer** asks the same questions as the text Setup Wizard, one screen at a time, with a short explanation and a suggestion for your computer. Nothing downloads until you press **Install**.
 
 **EASY-INSTALL** picks the AI size for your computer, includes full Wikipedia (if there's room), leaves
 "Share on Wi-Fi" **off**, adds no extra libraries and downloads **no maps**. You can change all of that later with **STATUS**.
@@ -54,7 +73,7 @@ it is a PC. Use the Windows file.
 ## How to get it
 
 1. **Download the kit:** go to the **[latest release](https://github.com/wallenberg4001-del/offline-ai-kit/releases/latest)**
-   and click **`Offline-AI-Kit-x.y.z.zip`** under **Assets** (for example `Offline-AI-Kit-1.3.0.zip`).
+   and click **`Offline-AI-Kit-x.y.z.zip`** under **Assets** (for example `Offline-AI-Kit-1.4.0.zip`).
    *(Or, on this page, click the green **Code** button, then **Download ZIP**. That works too.)*
 2. **Unzip it.**
    - **Windows:** right-click the ZIP, choose **Properties**, tick **Unblock**, click **OK**.
@@ -132,11 +151,15 @@ fingerprint (checksum) so nothing is damaged or tampered with.
 
 ## Want choices, or more control?
 
-- **Want to choose for yourself?** Use the **Setup Wizard** instead: `SETUP.bat` on Windows, `SETUP-MAC.command` on Mac
-  (see [Two ways to install](#two-ways-to-install--pick-one)).
+- **Want every choice explained?** Open **`Click these/1 Install - guided`** (see [Three ways to install](#three-ways-to-install--pick-one)).
+- **Prefer a text window?** Use the **Setup Wizard**: `SETUP.bat` on Windows, `SETUP-MAC.command` on Mac.
 - **Already installed?** Double-click **STATUS** (`STATUS.bat` / `STATUS-MAC.command`). Besides showing what's running,
   it has a small menu: **turn Share on Wi-Fi on/off**, **add Extra Libraries**, and **check for updates**.
 - **Power user?** See [ADVANCED.md](ADVANCED.md) for options, `kit-settings.ini`, ports, and using your own Ollama.
+
+## Emergency first aid
+
+On the chat page, **Emergency first aid** opens large buttons for bleeding, choking, burns, chest pain, water, a power cut, shelter, and other urgent problems. Each button searches the offline library and shows the articles first. A short summary is written from those articles afterwards. Call your local emergency number if you can (911 in Canada and the United States). The summary can be wrong. Read the article. This is not a doctor.
 
 ## 📱 Use it on phones and tablets (Share on Wi-Fi)
 

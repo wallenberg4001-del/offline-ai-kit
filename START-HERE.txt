@@ -6,6 +6,19 @@ This puts a helpful "ask me anything" assistant and a big
 library (including all of Wikipedia) on your computer, so they
 still work when the internet or power is out.
 
+Open the folder called   Click these
+The folders inside are numbered. Start with the one called
+   1 Install - guided
+It opens a page in your web browser and explains every choice
+before anything is downloaded. Pick the file for your computer
+(Windows, Mac, or Linux).
+
+If you would rather not answer any questions, open
+   2 Install - no questions
+instead.
+
+FOLDER-GUIDE.txt explains every other folder.
+
 
 ------------------ WHICH ONE DO I NEED? ---------------------
 

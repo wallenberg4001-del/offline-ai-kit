@@ -1,0 +1,10 @@
+This opens a page in your web browser and explains every choice.
+
+Nothing is downloaded until you press Install on the last screen.
+Leave the window that opened this page open. Closing it stops the download.
+
+Double-click:
+  Windows.bat     on a Windows PC
+  Mac.command     on a Mac (Apple chip or Intel)
+  Linux.sh        on Linux. In a terminal:
+                  bash "Linux.sh"

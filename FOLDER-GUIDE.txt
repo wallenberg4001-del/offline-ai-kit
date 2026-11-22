@@ -1,0 +1,52 @@
+OFFLINE AI KIT - WHAT IS IN THIS FOLDER
+========================================
+
+Start here if you are not sure what to click.
+
+Open the folder named "Click these". The folders inside are numbered:
+
+  1 Install - guided
+      A page in your web browser. It explains every choice,
+      then downloads. Best if this is your first time.
+      Nothing is downloaded until you press Install.
+
+  2 Install - no questions
+      The same install, with good choices picked for this
+      computer. There are no questions.
+
+  3 Start
+      Use this every time after the kit is installed.
+      It opens the chat and the library.
+
+  4 Stop
+      Turns the kit off.
+
+  5 Check status
+      Turn phones on the home Wi-Fi on or off, add extra
+      libraries, add maps, or check for a newer version.
+
+Inside each of those folders, double-click the file that
+matches your computer: Windows, Mac, or Linux.
+
+The files at the top of this folder (EASY-INSTALL, START,
+SETUP, STOP, STATUS) do the same jobs. They are kept so older
+instructions and the Desktop shortcut still work. You can use
+"Click these" and ignore those files.
+
+LEAVE THESE FOLDERS ALONE. They are the program:
+  scripts     the Windows program
+  mac         the Mac program
+  linux       the Linux program
+  www         the chat page, the emergency screen, and the installer page
+  catalog     the lists of optional libraries and maps
+
+Do not delete these. They appear after you install, and they
+are your library and your AI:
+  library          the offline books, Wikipedia, and maps
+  ollama-models    the AI
+  runtime          the programs that were downloaded
+  kit-settings.ini your choices
+  logs             what happened, if something goes wrong
+
+Read START-HERE.txt for click-by-click instructions.
+Read README.md for the full guide.

@@ -1,0 +1,3 @@
+This turns the kit off.
+
+Your library and the AI stay on the drive. Run Start the next time.

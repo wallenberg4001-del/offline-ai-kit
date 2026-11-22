@@ -18,9 +18,11 @@ param(
   [switch]$DetectOnly,            # just show the hardware check and chosen profile, then exit
   [switch]$Yes,
   [switch]$ShareWifi,              # turn on Share on Wi-Fi (phones/tablets on the home network)
+  [switch]$NoShareWifi,            # turn Share on Wi-Fi off (the guided installer always passes one of these)
   [string]$ExtraLibraries = '',    # comma list of Extra Library ids or numbers (catalog\extra-libraries.txt), or 'all'
   [string]$Maps = '',              # comma list of map ids or numbers (catalog\maps.txt), or 'all'. Easy Install ignores this unless you pass it.
-  [switch]$Universal              # also download programs for Windows, Mac and Linux (one shared library)
+  [switch]$Universal,             # also download programs for Windows, Mac and Linux (one shared library)
+  [switch]$ThisComputer           # this computer only (the guided installer passes this or -Universal)
 )
 . (Join-Path $PSScriptRoot 'common.ps1')
 . (Join-Path $PSScriptRoot 'programs.ps1')
@@ -98,14 +100,14 @@ $target = [System.IO.Path]::GetFullPath($target.Trim().Trim('"'))
 if ($target.TrimEnd('\','/') -ne $Kit.TrimEnd('\','/')) {
   Write-Host "Copying the kit files to $target ..."
   New-Item -ItemType Directory -Force -Path $target | Out-Null
-  foreach ($item in @('scripts','www','mac','linux','catalog','VERSION','SETUP.bat','EASY-INSTALL (Windows).bat','START-OFFLINE-AI.bat','STOP-OFFLINE-AI.bat','STATUS.bat','SETUP-MAC.command','EASY-INSTALL (Mac).command','START-OFFLINE-AI-MAC.command','STOP-OFFLINE-AI-MAC.command','STATUS-MAC.command','SETUP-LINUX.sh','EASY-INSTALL (Linux).sh','START-OFFLINE-AI-LINUX.sh','STOP-OFFLINE-AI-LINUX.sh','STATUS-LINUX.sh','README.md','START-HERE.txt','ADVANCED.md','README-OUTAGE.txt','kit-settings.example.ini','kit-settings.ini','LICENSE')) {
+  foreach ($item in @('scripts','www','mac','linux','catalog','Click these','FOLDER-GUIDE.txt','VERSION','SETUP.bat','EASY-INSTALL (Windows).bat','START-OFFLINE-AI.bat','STOP-OFFLINE-AI.bat','STATUS.bat','SETUP-MAC.command','EASY-INSTALL (Mac).command','START-OFFLINE-AI-MAC.command','STOP-OFFLINE-AI-MAC.command','STATUS-MAC.command','SETUP-LINUX.sh','EASY-INSTALL (Linux).sh','START-OFFLINE-AI-LINUX.sh','STOP-OFFLINE-AI-LINUX.sh','STATUS-LINUX.sh','README.md','START-HERE.txt','ADVANCED.md','README-OUTAGE.txt','kit-settings.example.ini','kit-settings.ini','LICENSE')) {
     $src = Join-Path $Kit $item
     if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination $target -Recurse -Force }
   }
   Write-Host 'Continuing setup in the new folder...'
   $argList = @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $target 'scripts\setup.ps1'))
   foreach ($pair in @(@('-HardwareProfile',$HardwareProfile),@('-Tier',$Tier),@('-Models',$Models),@('-Zims',$Zims),@('-ExtraLibraries',$ExtraLibraries),@('-Maps',$Maps))) { if ($pair[1]) { $argList += @($pair[0], $pair[1]) } }
-  foreach ($sw in @(@('-Test',$Test),@('-Easy',$Easy),@('-SkipWikipedia',$SkipWikipedia),@('-WithWikipedia',$WithWikipedia),@('-UseSystemOllama',$UseSystemOllama),@('-NoStart',$NoStart),@('-Yes',$Yes),@('-ShareWifi',$ShareWifi),@('-Universal',$Universal))) { if ($sw[1]) { $argList += $sw[0] } }
+  foreach ($sw in @(@('-Test',$Test),@('-Easy',$Easy),@('-SkipWikipedia',$SkipWikipedia),@('-WithWikipedia',$WithWikipedia),@('-UseSystemOllama',$UseSystemOllama),@('-NoStart',$NoStart),@('-Yes',$Yes),@('-ShareWifi',$ShareWifi),@('-NoShareWifi',$NoShareWifi),@('-Universal',$Universal),@('-ThisComputer',$ThisComputer))) { if ($sw[1]) { $argList += $sw[0] } }
   & (Get-Process -Id $PID).Path @argList
   exit $LASTEXITCODE
 }
@@ -224,11 +226,13 @@ if ($Easy) {
   # Step 5: share on Wi-Fi
   Step 5 'Share on home Wi-Fi (phones and tablets)'
   Write-Host '  Lets phones and tablets on the same Wi-Fi use the chat and library. Trusted home Wi-Fi only.'
-  if (-not $ShareWifi) {
+  if ($ShareWifi) { Write-Host '  Chosen on the command line: ON' }
+  elseif ($NoShareWifi) { $shareChoice = $false; Write-Host '  Chosen on the command line: off' }
+  else {
     $defS = 'N'; if ($ShareOnWifi) { $defS = 'Y' }
     $a = Ask 'Turn on Share on Wi-Fi? (Y/N)' $defS
     $shareChoice = ($a -match '^[Yy]')
-  } else { Write-Host '  Chosen on the command line: ON' }
+  }
   if ($shareChoice) { Write-WifiWarning }
 
   # Step 6: optional offline maps. Easy Install never reaches this (maps stay off unless -Maps was passed).
@@ -258,6 +262,7 @@ if ($Easy) {
   if ($TestMode) { Write-Host '     Test mode does not download programs for other computers.' }
   else { Write-Host ("     Extra download for the other computers: about {0:N1} GB." -f $extraNow) }
   if ($Universal) { Write-Host '  Chosen on the command line: All computers (universal drive)'; $universal = $true }
+  elseif ($ThisComputer) { Write-Host '  Chosen on the command line: This computer only'; $universal = $false }
   else {
     $defU = '1'; if ((Get-Setting 'UNIVERSAL' 'no') -match '^(?i)(yes|true|1|2)$') { $defU = '2' }
     $a = Ask 'Type 1 or 2' $defU

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Emergency — Offline AI Kit</title>
+<style>
+  :root { --bg: #1a0e0c; --ink: #fff6f2; --muted: #f0c7bc; --panel: #2a1412; --line: #5a2a24; --btn: #9d2c2c; --btn2: #c44536; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 18px/1.4 "Segoe UI", -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif; }
+  body { max-width: 52rem; margin: 0 auto; padding: 16px 16px 48px; }
+  header h1 { font-size: 32px; margin: 0 0 8px; letter-spacing: 0.02em; }
+  a { color: #ffd0c4; }
+  .call {
+    background: #3a120f; border: 2px solid #e07a5f; border-radius: 12px; padding: 12px 14px; margin: 12px 0 18px;
+  }
+  .call strong { display: block; font-size: 20px; margin-bottom: 4px; }
+  nav { margin: 8px 0 16px; }
+  nav a { margin-right: 14px; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 18px 0 8px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } header h1 { font-size: 28px; } }
+  button, a.article {
+    font: inherit; border-radius: 12px; border: 0; cursor: pointer; text-decoration: none;
+  }
+  button.topic {
+    min-height: 76px; padding: 12px 14px; background: var(--btn); color: white; font-size: 22px; font-weight: 700; text-align: left;
+  }
+  button.topic:hover, button.topic:focus { background: var(--btn2); }
+  button.back { background: transparent; color: var(--ink); border: 1px solid var(--line); padding: 10px 14px; margin-bottom: 12px; }
+  .status { color: var(--muted); }
+  .links { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+  a.article { display: block; background: var(--panel); color: var(--ink); padding: 14px; font-size: 18px; font-weight: 650; border: 1px solid var(--line); }
+  a.article .from { display: block; font-weight: 450; color: var(--muted); font-size: 14px; margin-top: 4px; }
+  .summary { white-space: pre-wrap; background: #24110f; border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .note { color: var(--muted); font-size: 16px; }
+  h3 { margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Emergency</h1>
+  <div class="call">
+    <strong>Call your local emergency number if you can.</strong>
+    In Canada and the United States that number is 911. This screen only looks up the offline library on this computer. It is not a doctor and it is not a substitute for emergency services.
+  </div>
+  <nav>
+    <a href="chat.html">Full chat</a>
+    <a id="libLink" href="http://127.0.0.1:8090/">Open the library</a>
+  </nav>
+</header>
+<main id="aid-app">
+  <div id="topic-home"></div>
+  <div id="topic-result" hidden></div>
+</main>
+<script src="kit-config.js"></script>
+<script src="ask-library.js"></script>
+<script src="first-aid.js"></script>
+<script>
+(function () {
+  var CFG = window.KIT_CONFIG || {};
+  if (window.AskLibrary) {
+    var EP = AskLibrary.endpoints(location, CFG);
+    var link = document.getElementById("libLink");
+    if (link && EP.home) link.href = EP.home;
+  }
+})();
+</script>
+</body>
+</html>
