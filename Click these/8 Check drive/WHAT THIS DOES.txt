@@ -1,0 +1,8 @@
+Checks this drive without using the internet.
+
+Quick (the default) checks that the files are there and the right size,
+then tries to open each book with this computer's library program.
+Full also checks every file against DRIVE-MANIFEST.json. That can take
+hours on a full drive. It shows progress and can be run again to resume.
+
+It ends with RESULT: DRIVE OK or RESULT: DRIVE INCOMPLETE.

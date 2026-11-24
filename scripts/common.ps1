@@ -616,6 +616,7 @@ function New-DesktopShortcut {
     $lnk.IconLocation = "$env:SystemRoot\System32\shell32.dll,13"
     $lnk.Save()
     Write-Host "  Put an 'Offline AI' shortcut on the Desktop." -ForegroundColor Green
+    try { Add-ComputerReceipt 'shortcut' (Join-Path $desk 'Offline AI.lnk') } catch {}
   } catch { Write-Host '  Could not create the Desktop shortcut (not a problem; use START-OFFLINE-AI.bat).' -ForegroundColor Yellow }
 }
 
@@ -935,3 +936,4 @@ function Write-MissingPlatform {
 }
 
 Resolve-KitRuntime
+. (Join-Path $PSScriptRoot 'v160.ps1')

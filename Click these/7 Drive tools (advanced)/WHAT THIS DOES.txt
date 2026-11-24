@@ -1,0 +1,15 @@
+Drive tools. This is not Uninstall.
+
+Uninstall removes the kit from this computer. The drive is not changed.
+This folder can delete files on the drive. It asks you to type a phrase.
+Pressing Return selects nothing.
+
+1. Remove chosen library files or models.
+   Type DELETE and the number of files, for example DELETE 2 FILES.
+2. Remove the whole kit from the drive.
+   Type REMOVE KIT FROM DRIVE.
+3. Erase the kit partition, or the whole disk only when nothing else is on it.
+   Type the volume label, then ERASE.
+   --yes is not accepted for erase.
+
+Nothing is deleted until the phrase matches. A dry run is shown first.

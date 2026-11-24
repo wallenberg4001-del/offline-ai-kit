@@ -25,7 +25,7 @@ wiki_line() {
     ms="$(sed -n 's/.*"message":"\(.*\)","updated".*/\1/p' "$WIKI_PROGRESS")"
     say "Full Wikipedia: $st - $ms"
   else
-    say "Full Wikipedia: not started yet (it starts with $LAUNCH_START)"
+    say "Full Wikipedia: missing. Run $LAUNCH_SETUP with internet to add it."
   fi
 }
 show_status() {
@@ -41,7 +41,14 @@ show_status() {
   say ""; say "Verified library collections:"
   for m in "$VERIFIED_DIR"/*.zim; do
     [ -e "$m" ] || continue
-    z="$LIBRARY/$(basename "$m")"; [ -f "$z" ] && say "  $(basename "$m")  ($(gb "$(file_size "$z")"))"
+    z="$LIBRARY/$(basename "$m")"
+    if [ -f "$z" ] || v160_has_split "$(basename "$m")"; then
+      if v160_kiwix_tool kiwix-search >/dev/null 2>&1; then
+        say "  $(basename "$m")  $(v160_status_word "$z")"
+      else
+        say "  $(basename "$m")  ($(gb "$(file_size "$(v160_book_file "$z" || printf '%s' "$z")")"))"
+      fi
+    fi
   done
   say ""; wiki_line
 }

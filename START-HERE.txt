@@ -17,6 +17,17 @@ If you would rather not answer any questions, open
    2 Install - no questions
 instead.
 
+The guided installer can put everything on an external hard
+drive. Plug the drive in when it asks. It downloads Wikipedia
+and the guides onto that drive before it says the drive is
+ready. Leave the drive plugged in until then. Next time, open
+the drive and use Click these, then 3 Start.
+
+To remove the kit from this computer, open Click these, then
+   6 Uninstall
+It asks you to type YES. The drive is not changed.
+Deleting files from the drive is in 7 Drive tools.
+
 FOLDER-GUIDE.txt explains every other folder.
 
 
@@ -202,10 +213,15 @@ FOLDER-GUIDE.txt explains every other folder.
  computer and runs them from there. The library stays on
  the USB.
 
- On a Mac, kiwix-serve cannot open a library file bigger
- than 4 GB when that file sits on exFAT. Windows and Linux
- can. Keep big files on APFS or the internal disk if you
- use a Mac. Smaller files on the USB still open.
+ One copy of every book is stored. Library programs need
+ libzim 9.6.0 or newer so a Mac can open the large books
+ on exFAT. FAT32 still cannot store a file larger than
+ 4 GB. Prepare a drive for every computer keeps one copy
+ for Windows, Mac, and Linux. If you erase the whole
+ disk, you can also make AI-DRIVE, 3 TB unless you type
+ another size, for a Windows PC to store LLM models.
+ The kit uses the rest of the disk. The startup disk is
+ never erased.
 
  The computer is kept awake during long downloads. Leave
  it plugged in.

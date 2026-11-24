@@ -7,6 +7,7 @@ use warnings;
 use IO::Socket::INET;
 use JSON::PP qw(decode_json encode_json);
 use POSIX qw(WNOHANG);
+use File::Temp qw(tempfile);
 use FindBin qw($Bin);
 
 my $KIT = $Bin;
@@ -32,7 +33,7 @@ die "Could not open the guided installer (ports 8092-8095 are in use).\nUse SETU
 my $url = "http://127.0.0.1:$port/";
 print "Guided installer is open in your web browser:\n  $url\n";
 print "Leave this window open. Closing it stops the installer.\n";
-print "Nothing is downloaded until you press Install on the last screen.\n";
+print "Nothing is erased until you press Erase, and nothing is downloaded until you press Install.\n";
 if (!$ENV{OFFLINE_AI_NO_BROWSER}) {
     if (($ENV{OFFLINE_AI_OS} || '') eq 'linux') { system 'xdg-open', $url; }
     else { system 'open', $url; }
@@ -83,6 +84,16 @@ sub handle {
         }
         return respond($client, 200, 'application/json; charset=utf-8', $json);
     }
+    if ($method eq 'GET' && $path eq '/api/drives') {
+        my $json = `bash "$KIT/mac/list-drives.sh"`;
+        if ($? != 0 || $json !~ /^\s*\[/) { $json = "[]\n"; }
+        return respond($client, 200, 'application/json; charset=utf-8', $json);
+    }
+    if ($method eq 'GET' && $path eq '/api/disks') {
+        my $json = `bash "$KIT/mac/list-disks.sh"`;
+        if ($? != 0 || $json !~ /^\s*\[/) { $json = "[]\n"; }
+        return respond($client, 200, 'application/json; charset=utf-8', $json);
+    }
     if ($method eq 'GET' && $path eq '/api/log') {
         reap();
         my $text = read_log();
@@ -107,11 +118,101 @@ sub handle {
         push @cmd, '--maps', $maps if $maps ne '';
         push @cmd, ($data->{shareWifi} ? '--share-wifi' : '--no-share-wifi');
         push @cmd, ($data->{universal} ? '--universal' : '--this-computer');
+        my $dest = defined $data->{path} ? $data->{path} : '';
+        if ($dest ne '') {
+            my $path_err = check_path($dest);
+            return respond($client, 400, 'text/plain; charset=utf-8', "$path_err\n") if $path_err;
+            push @cmd, '--path', $dest;
+        }
+        my $wiki_now = $data->{wikiNow} ? 1 : 0;
+        push @cmd, '--wiki-now' if $wiki_now && $data->{wikipedia};
+        my $start_err = start_install(@cmd);
+        return respond($client, 500, 'text/plain; charset=utf-8', "$start_err\n") if $start_err;
+        return respond($client, 200, 'application/json; charset=utf-8', '{"ok":true}');
+    }
+    if ($method eq 'POST' && $path eq '/api/prepare') {
+        return respond($client, 409, 'text/plain; charset=utf-8', "An install or erase is already running.\n") if $install_pid;
+        my $data = eval { decode_json($body) };
+        return respond($client, 400, 'text/plain; charset=utf-8', "The choices could not be read.\n") unless $data && ref $data eq 'HASH';
+        my $err = check_prepare($data);
+        return respond($client, 400, 'text/plain; charset=utf-8', "$err\n") if $err;
+        my $start_err = start_prepare($body);
+        return respond($client, 500, 'text/plain; charset=utf-8', "$start_err\n") if $start_err;
+        return respond($client, 200, 'application/json; charset=utf-8', '{"ok":true}');
+    }
+    if ($method eq 'POST' && $path eq '/api/drive-tools') {
+        return respond($client, 409, 'text/plain; charset=utf-8', "An install or erase is already running.\n") if $install_pid;
+        my $data = eval { decode_json($body) };
+        return respond($client, 400, 'text/plain; charset=utf-8', "The choices could not be read.\n") unless $data && ref $data eq 'HASH';
+        my $action = defined $data->{action} ? $data->{action} : '';
+        my $phrase = defined $data->{phrase} ? $data->{phrase} : '';
+        my $erase = defined $data->{erase} ? $data->{erase} : '';
+        my $files = (ref $data->{files} eq 'ARRAY') ? $data->{files} : [];
+        if ($data->{yes}) {
+            return respond($client, 400, 'text/plain; charset=utf-8', "--yes is not accepted for erase.\n") if $action eq 'erase';
+        }
+        if ($action eq 'library') {
+            my $want = 'DELETE ' . scalar(@$files) . ' FILES';
+            return respond($client, 400, 'text/plain; charset=utf-8', "Type the confirmation exactly.\n") unless $phrase eq $want;
+        } elsif ($action eq 'kit') {
+            return respond($client, 400, 'text/plain; charset=utf-8', "Type the confirmation exactly.\n") unless $phrase eq 'REMOVE KIT FROM DRIVE';
+        } elsif ($action eq 'erase') {
+            return respond($client, 400, 'text/plain; charset=utf-8', "--yes is not accepted for erase.\n") if $data->{yes};
+            my $label = defined $data->{label} ? $data->{label} : '';
+            return respond($client, 400, 'text/plain; charset=utf-8', "Type the confirmation exactly.\n") unless $label ne '' && $phrase eq $label && $erase eq 'ERASE';
+        } else {
+            return respond($client, 400, 'text/plain; charset=utf-8', "Pick an action.\n");
+        }
+        my @cmd = ('bash', "$KIT/mac/drive-tools.sh", '--action', $action, '--phrase', $phrase);
+        if ($action eq 'erase') {
+            my $scope = (defined $data->{scope} && $data->{scope} eq 'disk') ? 'disk' : 'partition';
+            push @cmd, '--erase-word', 'ERASE', '--scope', $scope;
+        } else {
+            push @cmd, '--yes', '--i-understand-this-deletes-data';
+            if ($action eq 'library') {
+                push @cmd, '--files', join(',', @$files);
+            }
+        }
         my $start_err = start_install(@cmd);
         return respond($client, 500, 'text/plain; charset=utf-8', "$start_err\n") if $start_err;
         return respond($client, 200, 'application/json; charset=utf-8', '{"ok":true}');
     }
     respond($client, 404, 'text/plain; charset=utf-8', "Not found.\n");
+}
+
+sub check_prepare {
+    my ($data) = @_;
+    return 'Tick the box before erasing.' unless $data->{confirmed};
+    my $mode = defined $data->{mode} ? $data->{mode} : '';
+    return 'Pick what to erase.' unless $mode eq 'partition' || $mode eq 'disk';
+    my $disk = defined $data->{disk} ? $data->{disk} : '';
+    return 'Pick a disk.' unless $disk =~ /\A(?:disk[0-9]+|sd[a-z]+|nvme[0-9]+n[0-9]+|mmcblk[0-9]+)\z/;
+    if ($mode eq 'partition') {
+        my $part = defined $data->{partitionId} ? $data->{partitionId} : '';
+        my $rest = ($part =~ /\A[A-Za-z0-9]+\z/ && index($part, $disk) == 0) ? substr($part, length($disk)) : '';
+        return 'That partition is not on this disk.' unless $rest =~ /\A(?:s\d+|p?\d+)\z/;
+    }
+    my $size = defined $data->{sizeGB} ? $data->{sizeGB} : 0;
+    my $models = defined $data->{modelsGB} ? $data->{modelsGB} : 0;
+    return 'The Windows drive is only made when the whole disk is erased.' if $mode eq 'partition' && $models;
+    return 'That size does not fit on this disk.' if $mode eq 'disk' && $size && $size < 200;
+    if ($mode eq 'disk' && $models) {
+        return 'The Windows drive needs at least 200 GB.' if $models < 200;
+        my $disk_gb = defined $data->{diskSizeGB} ? $data->{diskSizeGB} : 0;
+        if ($disk_gb) {
+            my $kit = $size ? $size : ($disk_gb - $models);
+            return 'The Windows drive does not leave 200 GB for the kit.' if $kit < 199;
+        }
+    }
+    return '';
+}
+
+sub check_path {
+    my ($path) = @_;
+    return 'Pick a folder on the drive.' unless defined $path && $path =~ m{\A/};
+    return 'That folder path has a character the installer cannot use.' if $path =~ /[&|<>^%\r\n]/;
+    return 'Pick a folder on the drive.' if $path =~ m{(^|/)\.\.(/|$)};
+    return '';
 }
 
 sub validate {
@@ -136,6 +237,43 @@ sub id_list {
     return join(',', @$list);
 }
 
+sub start_prepare {
+    my ($json) = @_;
+    mkdir "$KIT/logs";
+    open my $logfh, '>', $LOG or return 'Cannot write the install log.';
+    my ($tfh, $tmp) = eval { tempfile('prepare-XXXXXX', TMPDIR => 1, UNLINK => 0) };
+    if (!$tfh) {
+        close $logfh;
+        return 'Could not save the erase request.';
+    }
+    print $tfh $json;
+    if (!close $tfh) {
+        unlink $tmp;
+        close $logfh;
+        return 'Could not save the erase request.';
+    }
+    my $pid = fork();
+    if (!defined $pid) {
+        unlink $tmp;
+        close $logfh;
+        return 'Could not start the erase.';
+    }
+    if ($pid == 0) {
+        open STDOUT, '>&', $logfh or do { print STDERR "Could not write the erase log.\n"; unlink $tmp; exit 1; };
+        open STDERR, '>&', STDOUT or do { print "Could not write the erase log.\n"; unlink $tmp; exit 1; };
+        $| = 1;
+        open STDIN, '<', $tmp or do { print "Could not read the erase request.\n"; unlink $tmp; exit 1; };
+        unlink $tmp;
+        chdir $KIT or do { print "Could not open the kit folder.\n"; exit 1; };
+        exec 'bash', "$KIT/mac/prepare-disk.sh"
+            or do { print "Could not start the erase.\n"; exit 1; };
+    }
+    close $logfh;
+    $install_pid = $pid;
+    $install_exit = undef;
+    return '';
+}
+
 sub start_install {
     my (@cmd) = @_;
     mkdir "$KIT/logs";
@@ -143,12 +281,12 @@ sub start_install {
     my $pid = fork();
     return 'Could not start the installer.' unless defined $pid;
     if ($pid == 0) {
-        open STDOUT, '>&', $logfh or exit 1;
-        open STDERR, '>&', STDOUT or exit 1;
+        open STDOUT, '>&', $logfh or do { print STDERR "Could not write the install log.\n"; exit 1; };
+        open STDERR, '>&', STDOUT or do { print "Could not write the install log.\n"; exit 1; };
         $| = 1;
-        chdir $KIT or exit 1;
-        exec {$cmd[0]} @cmd;
-        exit 1;
+        chdir $KIT or do { print "Could not open the kit folder.\n"; exit 1; };
+        exec {$cmd[0]} @cmd
+            or do { print "Could not start the installer.\n"; exit 1; };
     }
     close $logfh;
     $install_pid = $pid;

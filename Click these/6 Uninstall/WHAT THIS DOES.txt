@@ -1,0 +1,10 @@
+This removes the Offline AI Kit from this computer.
+
+It asks you to type YES first. Nothing is deleted before that.
+It turns the kit off, then removes the Desktop shortcut if it
+starts this copy, and the small cache on this computer.
+
+The drive is not changed. Library files, Wikipedia, the guides,
+and the AI models stay on the drive. The drive itself is not erased.
+
+Deleting files from the drive is in Click these, then 7 Drive tools.

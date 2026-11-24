@@ -1,6 +1,6 @@
 #!/bin/bash
-# Starts the Offline AI Kit on macOS: library (Kiwix), AI models (Ollama), chat page,
-# and the full-Wikipedia background download if it is not finished yet.
+# Starts the Offline AI Kit on macOS: library (Kiwix), AI models (Ollama), and the chat page.
+# Wikipedia is downloaded by setup. Start does not use the network.
 #   --share-wifi / --no-share-wifi : turn Share on Wi-Fi on or off (remembered in kit-settings.ini)
 # shellcheck source=lib.sh
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
@@ -24,6 +24,7 @@ if programs_missing; then
   missing_program_message "$PLATFORM_ID"
   pause_exit 1
 fi
+migrate_v160 || true
 
 say ""; say "[1/3] Offline Library..."
 write_maps_index
@@ -51,13 +52,10 @@ elif [ "$SKIP_WIKIPEDIA" = yes ]; then
   fi
   write_wiki_status off 0 0 0 0 "Wikipedia is switched off"
 elif kit_pid wiki-download >/dev/null; then
-  say "  Still downloading in the background ($LAUNCH_STATUS shows progress)."
+  say "  A download is still running ($LAUNCH_STATUS shows progress). Start did not begin a new one."
 else
-  nohup bash "$MAC_DIR/wiki-download.sh" >> "$LOG_DIR/wikipedia-download-${LOG_TAG:-mac}.log" 2>&1 < /dev/null &
-  warn "  Not downloaded yet - started downloading it in the background (about $(gb "$(awk -v g="$WIKIPEDIA_GB" 'BEGIN { printf "%.0f", g * 1e9 }')"))."
-  say  "  Everything else works meanwhile. $LAUNCH_STATUS and the chat page show progress."
-  say  "  It resumes automatically if interrupted, and appears in the library when finished."
-  say  "  Keep the computer plugged in; it is kept awake while downloading."
+  warn "  Missing. Run $LAUNCH_SETUP with internet to add it."
+  say  "  Everything else works. Start does not download it."
 fi
 
 CHAT_URL="$WWW_DIR/chat.html"

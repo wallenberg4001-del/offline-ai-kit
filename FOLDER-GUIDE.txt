@@ -9,6 +9,17 @@ Open the folder named "Click these". The folders inside are numbered:
       A page in your web browser. It explains every choice,
       then downloads. Best if this is your first time.
       Nothing is downloaded until you press Install.
+      It can put the kit on an external hard drive and
+      download Wikipedia and the guides there before the
+      page says the drive is ready. It can also prepare a
+      drive for Windows, Mac, and Linux: that erases only
+      the partition you confirm, then formats it as exFAT.
+      If you erase the whole disk, you can also set aside
+      a Windows drive named AI-DRIVE, 3 TB unless you type
+      another size, for LLM models. The kit uses the rest.
+      Nothing is erased until you press Erase, and nothing
+      is downloaded until you press Install. Leave it
+      plugged in.
 
   2 Install - no questions
       The same install, with good choices picked for this
@@ -25,12 +36,27 @@ Open the folder named "Click these". The folders inside are numbered:
       Turn phones on the home Wi-Fi on or off, add extra
       libraries, add maps, or check for a newer version.
 
+  6 Uninstall
+      Removes it from this computer. The drive is not changed.
+      It asks you to type YES first. It turns the kit off,
+      then removes the Desktop shortcut if it starts this
+      copy, and the small cache on this computer.
+      The drive itself is not erased.
+
+  7 Drive tools (advanced)
+      Deletes chosen library files, the kit folder, or the
+      kit partition. It is not part of Uninstall. Pressing
+      Return selects nothing.
+
+  8 Check drive
+      Checks the files on the drive. Nothing is downloaded.
+
 Inside each of those folders, double-click the file that
 matches your computer: Windows, Mac, or Linux.
 
 The files at the top of this folder (EASY-INSTALL, START,
-SETUP, STOP, STATUS) do the same jobs. They are kept so older
-instructions and the Desktop shortcut still work. You can use
+SETUP, STOP, STATUS, UNINSTALL) do the same jobs. They are kept
+so older instructions and the Desktop shortcut still work. You can use
 "Click these" and ignore those files.
 
 LEAVE THESE FOLDERS ALONE. They are the program:

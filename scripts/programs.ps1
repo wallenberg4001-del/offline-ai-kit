@@ -273,3 +273,5 @@ function Install-UniversalPrograms {
     throw 'Universal program install was incomplete.'
   }
 }
+
+. (Join-Path $PSScriptRoot 'v160.ps1')

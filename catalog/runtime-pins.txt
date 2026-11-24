@@ -1,0 +1,27 @@
+# Offline AI Kit runtime pins.
+# component | platform | url | sha256 | version
+# kiwix-tools version is the libzim version. Nightlies are pinned by date.
+# Never fetch an unpinned "latest nightly".
+
+kiwix-tools | mac-arm64 | https://download.kiwix.org/nightly/2026-11-22/kiwix-tools_macos-arm64-2026-11-22.tar.gz | 7c214f6406d6f204f1d77e8fa34a71fb8b0108bc95f1d0eed92eb8c9e64812ef | 9.8.2
+kiwix-tools | mac-x64 | https://download.kiwix.org/nightly/2026-11-22/kiwix-tools_macos-x86_64-2026-11-22.tar.gz | 87579702b9926d453a44cd3bcb59b57fd8089a3372ee13f518cf262e0013624c | 9.8.2
+kiwix-tools | windows-x64 | https://download.kiwix.org/nightly/2026-11-22/kiwix-tools_win-x86_64-2026-11-22.zip | fbf1d3f77d65112301edbdb1245a088c6198dfc861c60c7d7316b52444e0a233 | 9.8.2
+kiwix-tools | linux-x64 | https://download.kiwix.org/nightly/2026-11-22/kiwix-tools_linux-x86_64-2026-11-22.tar.gz | 377bf4e5a8fd959b2bc44d650f2d950ef7a3a5c0e1514e03ef2dd287b6663c8e | 9.8.2
+kiwix-tools | linux-arm64 | https://download.kiwix.org/nightly/2026-11-22/kiwix-tools_linux-aarch64-2026-11-22.tar.gz | 2aae46617c8742dd9854b208043fca2129628ada04f4b870a10336b630f47f1a | 9.8.2
+kiwix-tools | linux-x64-musl | https://download.kiwix.org/nightly/2026-11-22/kiwix-tools_linux-x86_64-musl-2026-11-22.tar.gz | 688b7f7f1d213165033b0b5677eb23fa42b7f5f74fc85fc10031e8928d8340d8 | 9.8.2
+kiwix-tools | linux-arm64-musl | https://download.kiwix.org/nightly/2026-11-22/kiwix-tools_linux-aarch64-musl-2026-11-22.tar.gz | 990101bc76866920e42e87c6eb12b39bc4f0635e4c1b7134c20fd7c9e5bc21b4 | 9.8.2
+
+ollama | mac-arm64 | https://github.com/ollama/ollama/releases/download/v0.40.17/ollama-darwin.tgz | 4b9db20d077c5a1e52fb4a6f2e6791f76ae945fd07c9b1a5647c82e927826653 | v0.40.17
+ollama | mac-x64 | https://github.com/ollama/ollama/releases/download/v0.40.17/ollama-darwin.tgz | 4b9db20d077c5a1e52fb4a6f2e6791f76ae945fd07c9b1a5647c82e927826653 | v0.40.17
+ollama | windows-x64 | https://github.com/ollama/ollama/releases/download/v0.40.17/ollama-windows-amd64.zip | 3dd80f6e3a9699f2eadf4ac418f00529cee594df9557541806eda1f1f3f5588a | v0.40.17
+ollama | linux-x64 | https://github.com/ollama/ollama/releases/download/v0.40.17/ollama-linux-amd64.tar.zst | 1df9d6228bac5a22e420b242708c0d10e5b886db97bab99d446a41760f4e79af | v0.40.17
+ollama | linux-arm64 | https://github.com/ollama/ollama/releases/download/v0.40.17/ollama-linux-arm64.tar.zst | 0ec632480057cef6300459d1fa7dbbb3fc188b9a7d56cd0b0a72d05927d90ecc | v0.40.17
+ollama-v0.12.9 | mac-arm64 | https://github.com/ollama/ollama/releases/download/v0.12.9/ollama-darwin.tgz | a3bd64569cb945133dd714f3568989f6bcd4d988a3ba47d2c0dc644770547f17 | v0.12.9
+ollama-v0.12.9 | mac-x64 | https://github.com/ollama/ollama/releases/download/v0.12.9/ollama-darwin.tgz | a3bd64569cb945133dd714f3568989f6bcd4d988a3ba47d2c0dc644770547f17 | v0.12.9
+
+zstd | darwin-arm64 | https://github.com/aspect-build/zstd-prebuilt/releases/download/v1.5.6-bcr2/zstd_darwin_arm64 | 9848858f7332effb071818f282b3ac3052085e3dafa9ae09f0060b7e211a80dc | v1.5.6-bcr2
+zstd | darwin-amd64 | https://github.com/aspect-build/zstd-prebuilt/releases/download/v1.5.6-bcr2/zstd_darwin_amd64 | d81be8618553d7d658e09da669ffd68ec76d8095161a590c9b8a1a99fce67ca8 | v1.5.6-bcr2
+zstd | linux-amd64 | https://github.com/aspect-build/zstd-prebuilt/releases/download/v1.5.6-bcr2/zstd_linux_amd64 | 190c196b46883a234238d9c52a211c1494df79bb170fbe30c6fc22639d5d4731 | v1.5.6-bcr2
+zstd | linux-arm64 | https://github.com/aspect-build/zstd-prebuilt/releases/download/v1.5.6-bcr2/zstd_linux_arm64 | 4fa2386a975c2120f91f3103bd4268a19a341cb9063417f3829018e94f28c8c6 | v1.5.6-bcr2
+zstd | windows-x64 | https://github.com/aspect-build/zstd-prebuilt/releases/download/v1.5.6-bcr2/zstd_windows_x86_64.exe | 8765d39af6a89f5b7b05854d08027e739c8f2245c4488c8365b3ddaf5cdbcf28 | v1.5.6-bcr2
+zstd | windows-arm64 | https://github.com/aspect-build/zstd-prebuilt/releases/download/v1.5.6-bcr2/zstd_windows_arm64.exe | ef983e169862f9d32652c9017e500052bd31ce5a2c7cb16bccdb71bcfa90c884 | v1.5.6-bcr2

@@ -22,7 +22,8 @@ param(
   [string]$ExtraLibraries = '',    # comma list of Extra Library ids or numbers (catalog\extra-libraries.txt), or 'all'
   [string]$Maps = '',              # comma list of map ids or numbers (catalog\maps.txt), or 'all'. Easy Install ignores this unless you pass it.
   [switch]$Universal,             # also download programs for Windows, Mac and Linux (one shared library)
-  [switch]$ThisComputer           # this computer only (the guided installer passes this or -Universal)
+  [switch]$ThisComputer,          # this computer only (the guided installer passes this or -Universal)
+  [switch]$WikiNow                # download full Wikipedia in this setup, before it says the drive is ready
 )
 . (Join-Path $PSScriptRoot 'common.ps1')
 . (Join-Path $PSScriptRoot 'programs.ps1')
@@ -100,14 +101,14 @@ $target = [System.IO.Path]::GetFullPath($target.Trim().Trim('"'))
 if ($target.TrimEnd('\','/') -ne $Kit.TrimEnd('\','/')) {
   Write-Host "Copying the kit files to $target ..."
   New-Item -ItemType Directory -Force -Path $target | Out-Null
-  foreach ($item in @('scripts','www','mac','linux','catalog','Click these','FOLDER-GUIDE.txt','VERSION','SETUP.bat','EASY-INSTALL (Windows).bat','START-OFFLINE-AI.bat','STOP-OFFLINE-AI.bat','STATUS.bat','SETUP-MAC.command','EASY-INSTALL (Mac).command','START-OFFLINE-AI-MAC.command','STOP-OFFLINE-AI-MAC.command','STATUS-MAC.command','SETUP-LINUX.sh','EASY-INSTALL (Linux).sh','START-OFFLINE-AI-LINUX.sh','STOP-OFFLINE-AI-LINUX.sh','STATUS-LINUX.sh','README.md','START-HERE.txt','ADVANCED.md','README-OUTAGE.txt','kit-settings.example.ini','kit-settings.ini','LICENSE')) {
+  foreach ($item in @('scripts','www','mac','linux','catalog','Click these','FOLDER-GUIDE.txt','VERSION','SETUP.bat','EASY-INSTALL (Windows).bat','START-OFFLINE-AI.bat','STOP-OFFLINE-AI.bat','STATUS.bat','UNINSTALL.bat','CHECK-DRIVE.bat','SETUP-MAC.command','EASY-INSTALL (Mac).command','START-OFFLINE-AI-MAC.command','STOP-OFFLINE-AI-MAC.command','STATUS-MAC.command','UNINSTALL-OFFLINE-AI-MAC.command','CHECK-DRIVE (Mac).command','SETUP-LINUX.sh','EASY-INSTALL (Linux).sh','START-OFFLINE-AI-LINUX.sh','STOP-OFFLINE-AI-LINUX.sh','STATUS-LINUX.sh','UNINSTALL-OFFLINE-AI-LINUX.sh','CHECK-DRIVE (Linux).sh','README.md','START-HERE.txt','ADVANCED.md','README-OUTAGE.txt','kit-settings.example.ini','kit-settings.ini','LICENSE')) {
     $src = Join-Path $Kit $item
     if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination $target -Recurse -Force }
   }
   Write-Host 'Continuing setup in the new folder...'
   $argList = @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $target 'scripts\setup.ps1'))
   foreach ($pair in @(@('-HardwareProfile',$HardwareProfile),@('-Tier',$Tier),@('-Models',$Models),@('-Zims',$Zims),@('-ExtraLibraries',$ExtraLibraries),@('-Maps',$Maps))) { if ($pair[1]) { $argList += @($pair[0], $pair[1]) } }
-  foreach ($sw in @(@('-Test',$Test),@('-Easy',$Easy),@('-SkipWikipedia',$SkipWikipedia),@('-WithWikipedia',$WithWikipedia),@('-UseSystemOllama',$UseSystemOllama),@('-NoStart',$NoStart),@('-Yes',$Yes),@('-ShareWifi',$ShareWifi),@('-NoShareWifi',$NoShareWifi),@('-Universal',$Universal),@('-ThisComputer',$ThisComputer))) { if ($sw[1]) { $argList += $sw[0] } }
+  foreach ($sw in @(@('-Test',$Test),@('-Easy',$Easy),@('-SkipWikipedia',$SkipWikipedia),@('-WithWikipedia',$WithWikipedia),@('-UseSystemOllama',$UseSystemOllama),@('-NoStart',$NoStart),@('-Yes',$Yes),@('-ShareWifi',$ShareWifi),@('-NoShareWifi',$NoShareWifi),@('-Universal',$Universal),@('-ThisComputer',$ThisComputer),@('-WikiNow',$WikiNow))) { if ($sw[1]) { $argList += $sw[0] } }
   & (Get-Process -Id $PID).Path @argList
   exit $LASTEXITCODE
 }
@@ -145,6 +146,8 @@ function Step([int]$n, [string]$title) {
 }
 $WizardSteps = 8   # maps are step 6; which computers is step 7; the summary is step 8. Easy Install never asks.
 $universal = [bool]$Universal
+if ($Easy -and -not $ThisComputer) { $universal = $true }
+if ($Easy -and $wantWiki) { $WikiNow = $true }
 
 if ($Easy) {
   $pick = Select-ProfileForDisk $hwProfile $hw.FreeGB
@@ -291,7 +294,9 @@ $free = Get-FreeBytes $Kit
 if (-not $Easy) { Step $WizardSteps 'Summary' } else { Write-Host '' }
 Write-Host ("  AI models:        {0}" -f (($modelList | ForEach-Object { $_.Name }) -join ', '))
 Write-Host ("  Core library:     {0}" -f $tierName)
-Write-Host ("  Full Wikipedia:   {0}" -f $(if ($wantWiki) { 'Yes - about ' + (Format-GB ($WikipediaGB * 1e9)) + ', downloads in the background on first start' } else { 'No' }))
+if ($wantWiki -and $WikiNow) { Write-Host ("  Full Wikipedia:   Yes - about {0}, downloaded now, before setup says this drive is ready" -f (Format-GB ($WikipediaGB * 1e9))) }
+elseif ($wantWiki) { Write-Host ("  Full Wikipedia:   Yes - about {0}, not downloaded yet. Run SETUP with internet to add it. Start does not download it." -f (Format-GB ($WikipediaGB * 1e9))) }
+else { Write-Host '  Full Wikipedia:   No' }
 Write-Host ("  Extra libraries:  {0}" -f $(if ($extraSel.Count) { (($extraSel | ForEach-Object { $_.Id }) -join ', ') + ' (' + (Format-Size $extraGB) + ')' } else { 'none' }))
 Write-Host ("  Offline maps:     {0}" -f $(if ($mapSel.Count) { (($mapSel | ForEach-Object { $_.Id }) -join ', ') + ' (' + (Format-Size $mapGB) + ', shared files counted once)' } else { 'none' }))
 Write-Host ("  Share on Wi-Fi:   {0}" -f $(if ($shareChoice) { 'ON (trusted home Wi-Fi only)' } else { 'off' }))
@@ -301,10 +306,16 @@ if ($universal) {
   else { Write-Host ("  Extra programs:   about {0:N1} GB (other computers). Library, models and maps stay one shared copy." -f $extraProg) }
 }
 $totalGB = $estGB; if ($wantWiki) { $totalGB += $WikipediaGB }
-Write-Host ("  Download now:     about {0:N1} GB   (with Wikipedia later: about {1:N1} GB in total)" -f $estGB, $totalGB)
+if ($wantWiki -and $WikiNow) { Write-Host ("  Download now:     about {0:N1} GB, including Wikipedia" -f $totalGB) }
+else { Write-Host ("  Download now:     about {0:N1} GB   (with Wikipedia later: about {1:N1} GB in total)" -f $estGB, $totalGB) }
 Write-Host ("  Free space:       {0} on this drive" -f (Format-GB $free))
-if ($free -lt ($estGB * 1e9)) { Write-Host 'Not enough free space for these choices. Free up space, pick fewer extras or a smaller model size, or choose another drive.' -ForegroundColor Red; exit 1 }
-if ($wantWiki -and -not $TestMode -and $free -lt (($estGB + 140) * 1e9)) { Write-Host 'WARNING: there will not be enough room for full Wikipedia (~127 GB) on this drive.' -ForegroundColor Yellow }
+$spaceGB = $estGB
+if ($wantWiki) { $spaceGB = $totalGB }
+if (-not $TestMode) {
+  if (-not (Assert-KitSpace $spaceGB $free)) { exit 1 }
+} elseif ($free -lt ($estGB * 1e9)) { Write-Host 'Not enough free space for these choices. Free up space, pick fewer extras or a smaller model size, or choose another drive.' -ForegroundColor Red; exit 1 }
+if ($WikiNow -and $wantWiki -and -not $TestMode -and $free -lt (($estGB + 140) * 1e9)) { Write-Host 'Not enough free space for Wikipedia on this drive. Free about 140 GB more, or pick a larger drive.' -ForegroundColor Red; exit 1 }
+elseif ($wantWiki -and -not $TestMode -and $free -lt (($estGB + 140) * 1e9)) { Write-Host 'WARNING: there will not be enough room for full Wikipedia (~127 GB) on this drive.' -ForegroundColor Yellow }
 if (-not $Easy) {
   $go = Ask 'Proceed? (Y/N)' 'Y'
   if ($go -notmatch '^[Yy]') { Write-Host 'OK - nothing was downloaded or changed. Run SETUP.bat again any time.'; Write-Host 'RESULT: SETUP CANCELLED'; exit 0 }
@@ -401,6 +412,19 @@ try {
   }
 } finally { $env:OLLAMA_HOST = $savedHost }
 
+if ($wantWiki -and $WikiNow) {
+  Write-Host ''
+  Write-Host 'Downloading full English Wikipedia onto this drive now.'
+  Write-Host 'This is the big file (about 127 GB) and can take many hours.'
+  Write-Host 'Leave this window open and keep the drive plugged in.'
+  Write-Host 'You can unplug the drive after setup says it is ready.'
+  & (Join-Path $PSScriptRoot 'wiki-download.ps1') -Foreground
+  if (-not $?) {
+    Write-Host 'Wikipedia did not finish. Run the installer again. Finished pieces are kept.' -ForegroundColor Red
+    exit 1
+  }
+}
+
 # ---------- Done ----------
 Write-Host ''
 if ($failed.Count -gt 0) {
@@ -411,13 +435,13 @@ if ($failed.Count -gt 0) {
 }
 Write-Host ''
 if ($Easy) { New-DesktopShortcut }
-if ($failed.Count -gt 0) { Write-Host 'RESULT: SETUP FINISHED WITH PROBLEMS' } else { Write-Host 'RESULT: SETUP OK' }
 Write-Host 'NEXT: double-click START-OFFLINE-AI.bat (or the "Offline AI" shortcut on the Desktop).'
-if ($wantWiki -and $TestMode) { Write-Host 'The first start also downloads a small Wikipedia test file in the background (test mode).' }
+if ($wantWiki -and $WikiNow) { Write-Host 'Wikipedia and the guides are on this drive. You can unplug it after this window says the kit is ready.' }
 elseif ($wantWiki) {
-  Write-Host 'The first start also begins downloading FULL English Wikipedia (~127 GB) in the'
-  Write-Host 'background. Leave the PC on and online until it finishes (could be many hours).'
+  Write-Host 'Wikipedia is not on this drive yet. Run SETUP.bat with internet to add it.'
+  Write-Host 'Start does not download it.'
 }
+Complete-DriveSetup ($failed.Count -gt 0)
 if ($NoStart) { try { Stop-Transcript | Out-Null } catch {}; exit 0 }
 $go = 'Y'
 if (-not $Easy) { $go = Ask 'Start the kit now? (Y/N)' 'Y' }

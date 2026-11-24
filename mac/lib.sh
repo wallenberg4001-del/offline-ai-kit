@@ -262,6 +262,7 @@ make_desktop_shortcut() {
   f="$d/Offline AI.command"
   if printf '#!/bin/bash\n# Starts the Offline AI Kit\nexec bash "%s/START-OFFLINE-AI-MAC.command"\n' "$KIT" > "$f" 2>/dev/null; then
     chmod +x "$f"; ok "  Put an 'Offline AI' shortcut on the Desktop."
+    record_receipt shortcut "$f" || true
   else
     warn "  Could not create the Desktop shortcut (not a problem; use START-OFFLINE-AI-MAC.command)."
   fi
@@ -363,6 +364,7 @@ stage_program_tree() { # stage_program_tree <source dir> <name> -> cache dir tha
     touch "$marker"
     say "  This drive cannot run programs directly. Running $name from $dest."
     say "  Your library and models stay on this drive."
+    record_receipt cache "$dest" || true
   fi
   printf '%s\n' "$dest"
 }
@@ -636,49 +638,12 @@ start_ollama() {
   return 1
 }
 
-start_kiwix() { # (re)starts kiwix-serve with every verified ZIM
-  local bin zims=() m i
+start_kiwix() { # (re)starts kiwix-serve. A book this computer cannot open is skipped.
+  local bin addr=127.0.0.1
   stop_kit kiwix
   bin="$(kiwix_bin)" || { err "  Kiwix is missing. Run $LAUNCH_SETUP first."; return 1; }
-  for m in "$VERIFIED_DIR"/*.zim; do
-    [ -e "$m" ] || continue
-    [ -f "$LIBRARY/$(basename "$m")" ] && zims+=("$LIBRARY/$(basename "$m")")
-  done
-  if [ "${#zims[@]}" -eq 0 ]; then warn "  No verified library files yet - the library will be empty."; return 1; fi
-  for i in $(seq 1 10); do port_up "$LIBRARY_PORT" || break; sleep 0.5; done
-  if port_up "$LIBRARY_PORT"; then err "  Port $LIBRARY_PORT is used by another program; the library cannot start."; return 1; fi
-  local addr=127.0.0.1   # always private; with Share on Wi-Fi the chat page server passes library pages through
-  # shellcheck disable=SC2086  # see start_ollama
-  nohup $ARCH_CMD "$bin" --address="$addr" --port="$LIBRARY_PORT" "${zims[@]}" >> "$LOG_DIR/kiwix-${LOG_TAG:-mac}.log" 2>&1 < /dev/null &
-  printf '%s\n' "$!" > "$(pid_file kiwix)"
-  for i in $(seq 1 30); do
-    if port_up "$LIBRARY_PORT"; then say "  Library is serving ${#zims[@]} collection(s)."; return 0; fi
-    sleep 0.5
-  done
-  warn "  The library did not answer yet. See logs/kiwix-${LOG_TAG:-mac}.log"
-  warn_exfat_mmap
-  return 1
-}
-warn_exfat_mmap() {
-  # macOS kiwix-serve maps a ZIM with mmap. Apple's exFAT driver returns Invalid argument past 4 GiB.
-  # Windows and Linux open the same files. Do not hide the ZIMs in a disk image; one drive must work everywhere.
-  [ "$(uname -s)" = Darwin ] || return 0
-  [ "${KIT_OS:-mac}" = mac ] || return 0
-  local t big=no f log hit=no
-  t="$(fs_type "$LIBRARY" | tr -cd 'a-z0-9')"
-  case "$t" in *exfat*|*fat32*|*vfat*|*msdos*) ;; *) return 0 ;; esac
-  for f in "$LIBRARY"/*.zim; do
-    [ -f "$f" ] || continue
-    if [ "$(file_size "$f")" -gt 4294967295 ]; then big=yes; break; fi
-  done
-  [ "$big" = yes ] || return 0
-  log="$LOG_DIR/kiwix-${LOG_TAG:-mac}.log"
-  if grep -qiE 'mmap|Invalid argument|Unable to add' "$log" 2>/dev/null; then hit=yes; fi
-  if ! port_up "$LIBRARY_PORT" || [ "$hit" = yes ]; then
-    warn "Large library or map files (over 4 GB) on an exFAT or FAT drive cannot be opened by kiwix-serve on a Mac."
-    warn "Windows and Linux can open those same files. On a Mac, keep files over 4 GB on APFS or the internal disk."
-    warn "Files under 4 GB on this drive still open."
-  fi
+  # Always private. With Share on Wi-Fi the chat page server passes library pages through.
+  v160_start_library "$bin" "$addr"
 }
 
 # ---------- Share on Wi-Fi ----------
@@ -778,7 +743,7 @@ prefix_installed() { # prefix_installed <prefix> -> verified file name (YYYY-MM 
     rest="${b#"${prefix}"_}"
     case "$rest" in
       [0-9][0-9][0-9][0-9]-[0-9][0-9].zim|[0-9][0-9][0-9][0-9]-[0-9][0-9][a-z].zim)
-        [ -f "$LIBRARY/$b" ] && { printf '%s\n' "$b"; return 0; } ;;
+        if [ -f "$LIBRARY/$b" ] || v160_has_split "$b"; then printf '%s\n' "$b"; return 0; fi ;;
     esac
   done
   return 1
@@ -918,6 +883,7 @@ make_linux_desktop() {
   if printf '[Desktop Entry]\nType=Application\nName=Offline AI\nComment=Start the Offline AI Kit\nExec=bash "%s/%s"\nPath=%s\nTerminal=true\nCategories=Utility;\n' "$KIT" "$LAUNCH_START" "$KIT" > "$f" 2>/dev/null; then
     chmod +x "$f" 2>/dev/null || true
     ok "  Put an 'Offline AI' shortcut on the Desktop."
+    record_receipt shortcut "$f" || true
   else
     warn "  Could not create the Desktop shortcut (not a problem; use bash \"$KIT/$LAUNCH_START\")."
   fi
@@ -1355,4 +1321,6 @@ pause_exit() { # keep a double-clicked Terminal window readable
   if [ -t 0 ]; then printf '\n'; read -r -p "Press Return to close this window. " _ || true; fi
   exit "$code"
 }
+# shellcheck source=v160.sh
+. "$MAC_DIR/v160.sh"
 select_runtime_dirs

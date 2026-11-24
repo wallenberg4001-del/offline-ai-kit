@@ -7,11 +7,12 @@
 #   --models lite|8|16|24|32|"name,name"  --zims id,id  --path DIR  --skip-wikipedia  --with-wikipedia
 #   --use-system-ollama  --no-start  --yes  --test (quick test install, see ADVANCED.md)
 #   --share-wifi  --no-share-wifi  --extra-libraries id,id|all  --maps id,id|all  --universal  --this-computer
+#   --wiki-now    download full Wikipedia in this setup, before it says the drive is ready
 # Linux: linux/setup.sh sets OFFLINE_AI_OS=linux and runs this same wizard.
 # shellcheck source=lib.sh
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
-DETECT=no; TEST=no; TIER=""; MODELS=""; YES=no; EASY=no; HWPROFILE=""; ZIMS=""; INSTALL_PATH=""; SKIPW=no; WITHW=no; SYSOLL=no; NOSTART=no; SHAREW=no; NOSHARE=no; EXTRAS=""; MAPS=""; UNIVERSAL=no; UNIVERSAL_FLAG=no; THISCOMPUTER=no; PERSIST_SYSTEM_OLLAMA=no
+DETECT=no; TEST=no; TIER=""; MODELS=""; YES=no; EASY=no; HWPROFILE=""; ZIMS=""; INSTALL_PATH=""; SKIPW=no; WITHW=no; SYSOLL=no; NOSTART=no; SHAREW=no; NOSHARE=no; EXTRAS=""; MAPS=""; UNIVERSAL=no; UNIVERSAL_FLAG=no; THISCOMPUTER=no; PERSIST_SYSTEM_OLLAMA=no; WIKINOW=no
 ORIG_ARGS=("$@")
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -34,6 +35,7 @@ while [ $# -gt 0 ]; do
     --maps) MAPS="${2:-}"; shift ;;
     --universal) UNIVERSAL=yes; UNIVERSAL_FLAG=yes ;;
     --this-computer) THISCOMPUTER=yes ;;
+    --wiki-now) WIKINOW=yes ;;
     *) warn "Unknown option: $1 (see ADVANCED.md)" ;;
   esac
   shift
@@ -108,8 +110,8 @@ fi
 if [ "$TARGET" != "$KIT" ]; then
   say "Copying the kit files to $TARGET ..."
   for item in mac linux scripts www catalog "Click these" FOLDER-GUIDE.txt VERSION SETUP-MAC.command "EASY-INSTALL (Mac).command" START-OFFLINE-AI-MAC.command STOP-OFFLINE-AI-MAC.command \
-              STATUS-MAC.command SETUP-LINUX.sh "EASY-INSTALL (Linux).sh" START-OFFLINE-AI-LINUX.sh STOP-OFFLINE-AI-LINUX.sh STATUS-LINUX.sh \
-              SETUP.bat "EASY-INSTALL (Windows).bat" START-OFFLINE-AI.bat STOP-OFFLINE-AI.bat STATUS.bat README.md \
+              STATUS-MAC.command UNINSTALL-OFFLINE-AI-MAC.command "CHECK-DRIVE (Mac).command" SETUP-LINUX.sh "EASY-INSTALL (Linux).sh" START-OFFLINE-AI-LINUX.sh STOP-OFFLINE-AI-LINUX.sh STATUS-LINUX.sh UNINSTALL-OFFLINE-AI-LINUX.sh "CHECK-DRIVE (Linux).sh" \
+              SETUP.bat "EASY-INSTALL (Windows).bat" START-OFFLINE-AI.bat STOP-OFFLINE-AI.bat STATUS.bat UNINSTALL.bat "CHECK-DRIVE.bat" README.md \
               START-HERE.txt ADVANCED.md README-OUTAGE.txt kit-settings.example.ini kit-settings.ini LICENSE; do
     [ -e "$KIT/$item" ] && cp -R "$KIT/$item" "$TARGET/"
   done
@@ -155,12 +157,16 @@ if [ "$DETECT" = yes ]; then
 fi
 is_yes "${OFFLINE_AI_SKIP_WIKIPEDIA:-no}" && SKIPW=yes
 WANT_WIKI=yes; [ "$SKIPW" = yes ] && WANT_WIKI=no
+if [ "$EASY" = yes ] && [ "$WANT_WIKI" = yes ]; then WIKINOW=yes; fi
 EXTRA_SEL=""; [ -n "$EXTRAS" ] && EXTRA_SEL="$(resolve_extra_ids "$EXTRAS" | tr '\n' ' ')"
 MAP_SEL=""; [ -n "$MAPS" ] && MAP_SEL="$(resolve_map_ids "$MAPS" | tr '\n' ' ')"
 SHARE_CHOICE="$SHARE_ON_WIFI"; [ "$SHAREW" = yes ] && SHARE_CHOICE=yes   # Easy keeps the current setting (off on a new kit)
 WIZARD_STEPS=8   # maps are step 6; which computers is step 7; the summary is step 8. Easy Install never asks.
 step() { say ""; printf '%s\n' "--- Step $1 of $WIZARD_STEPS: $2 ------------------------------------------------" | cut -c1-64; }
 
+if [ "$EASY" = yes ] && [ "$THISCOMPUTER" != yes ]; then
+  UNIVERSAL=yes
+fi
 if [ "$EASY" = yes ]; then
   if pick="$(pick_profile_for_disk "$PROFILE" "$FREE_GB")"; then
     NEWP="${pick% *}"; PW="${pick#* }"
@@ -318,7 +324,8 @@ total="$est"; [ "$WANT_WIKI" = yes ] && total="$(awk -v a="$est" -v b="$WIKIPEDI
 if [ "$EASY" = yes ]; then say ""; else step "$WIZARD_STEPS" "Summary"; fi
 say "  AI models:        ${MODEL_LIST:-none (AI needs macOS 13+)}"
 say "  Core library:     $TIER"
-if [ "$WANT_WIKI" = yes ]; then say "  Full Wikipedia:   Yes - about $(gb "$(awk -v g="$WIKIPEDIA_GB" 'BEGIN { printf "%.0f", g * 1e9 }')"), downloads in the background on first start"
+if [ "$WANT_WIKI" = yes ] && [ "$WIKINOW" = yes ]; then say "  Full Wikipedia:   Yes - about $(gb "$(awk -v g="$WIKIPEDIA_GB" 'BEGIN { printf "%.0f", g * 1e9 }')"), downloaded now, before setup says this drive is ready"
+elif [ "$WANT_WIKI" = yes ]; then say "  Full Wikipedia:   Yes - about $(gb "$(awk -v g="$WIKIPEDIA_GB" 'BEGIN { printf "%.0f", g * 1e9 }')"), downloads in the background on first start"
 else say "  Full Wikipedia:   No"; fi
 if [ -n "${EXTRA_SEL// /}" ]; then say "  Extra libraries:  $EXTRA_SEL($(size_label "$EXTRA_GB"))"; else say "  Extra libraries:  none"; fi
 if [ -n "${MAP_SEL// /}" ]; then say "  Offline maps:     $MAP_SEL($(size_label "$MAP_GB"), shared files counted once)"; else say "  Offline maps:     none"; fi
@@ -329,10 +336,14 @@ if [ "$UNIVERSAL" = yes ]; then
   if [ "$TEST_MODE" = yes ]; then say "  Extra programs:   not downloaded in test mode."
   else say "  Extra programs:   about $EXTRA_PROG GB (other computers). Library, models and maps stay one shared copy."; fi
 fi
-say "  Download now:     about $est GB   (with Wikipedia later: about $total GB in total)"
+if [ "$WANT_WIKI" = yes ] && [ "$WIKINOW" = yes ]; then say "  Download now:     about $total GB, including Wikipedia"
+else say "  Download now:     about $est GB   (with Wikipedia later: about $total GB in total)"; fi
 say "  Free space:       $(gb "$FREE") on this drive"
-if awk -v f="$FREE" -v e="$est" 'BEGIN { exit !(f < e * 1e9) }'; then err "Not enough free space for these choices. Free up space, pick fewer extras or a smaller model size, or choose another drive."; pause_exit 1; fi
-if [ "$WANT_WIKI" = yes ] && [ "$TEST_MODE" != yes ] && awk -v f="$FREE" -v e="$est" 'BEGIN { exit !(f < (e + 140) * 1e9) }'; then warn "WARNING: there will not be enough room for full Wikipedia (~127 GB) on this drive."; fi
+space_gb="$est"
+if [ "$WANT_WIKI" = yes ]; then space_gb="$total"; fi
+if [ "$TEST_MODE" != yes ]; then
+  v160_assert_space "$space_gb" "$FREE" || pause_exit 1
+fi
 if [ "$EASY" != yes ]; then
   case "$(ask 'Proceed? (Y/N)' Y)" in
     [Yy]*) ;;
@@ -422,6 +433,17 @@ for m in $MODEL_LIST; do
 done
 fi
 
+if [ "$WANT_WIKI" = yes ] && [ "$WIKINOW" = yes ]; then
+  say ""
+  say "Downloading full English Wikipedia onto this drive now."
+  say "This is the big file (about 127 GB) and can take many hours."
+  say "Leave this window open and keep the drive plugged in."
+  say "You can unplug the drive after setup says it is ready."
+  wiki_script="$MAC_DIR/wiki-download.sh"
+  [ "${KIT_OS:-mac}" = linux ] && wiki_script="$KIT/linux/wiki-download.sh"
+  bash "$wiki_script" || { err "Wikipedia did not finish. Run the installer again. Finished pieces are kept."; pause_exit 1; }
+fi
+
 say ""
 if [ -n "$FAILED" ]; then
   warn "Setup finished with some problems (run $LAUNCH_SETUP again to retry just these):"
@@ -433,15 +455,15 @@ say ""
 if [ "$EASY" = yes ]; then
   if [ "${KIT_OS:-mac}" = linux ]; then make_linux_desktop; else make_desktop_shortcut; fi
 fi
-if [ -n "$FAILED" ]; then say "RESULT: SETUP FINISHED WITH PROBLEMS"; else say "RESULT: SETUP OK"; fi
 if [ "${KIT_OS:-mac}" = linux ]; then say "NEXT: bash \"$KIT/$LAUNCH_START\" (or 'Offline AI' on the Desktop)."
 else say "NEXT: double-click $LAUNCH_START (or 'Offline AI' on the Desktop)."; fi
-if [ "$WANT_WIKI" = yes ] && [ "$TEST_MODE" = yes ]; then
-  say "The first start also downloads a small Wikipedia test file in the background (test mode)."
+if [ "$WANT_WIKI" = yes ] && [ "$WIKINOW" = yes ]; then
+  say "Wikipedia and the guides are on this drive. You can unplug it after this window says the kit is ready."
 elif [ "$WANT_WIKI" = yes ]; then
-  say "The first start also begins downloading FULL English Wikipedia (~127 GB) in the"
-  say "background. Leave the computer plugged in and online until it finishes (could be many hours)."
+  say "Wikipedia is not on this drive yet. Run $LAUNCH_SETUP with internet to add it."
+  say "Start does not download it."
 fi
+v160_finish_setup "$FAILED"
 [ "$NOSTART" = yes ] && pause_exit 0
 go=Y; [ "$EASY" = yes ] || go="$(ask 'Start the kit now? (Y/N)' Y)"
 case "$go" in [Yy]*) say ""; say "Starting the kit..."; exec bash "$MAC_DIR/start.sh" ;; esac

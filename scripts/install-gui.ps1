@@ -36,6 +36,43 @@ function Send-File($Res, [string]$Path, [string]$Type) {
   $text = [System.IO.File]::ReadAllText($Path)
   Send-Response $Res 200 $Type $text
 }
+function Get-InstallerDrives {
+  $sys = $env:SystemDrive
+  $kitRoot = ''
+  try { $kitRoot = [System.IO.Path]::GetPathRoot($Kit) } catch { $kitRoot = '' }
+  $items = @()
+  try { $disks = @(Get-CimInstance Win32_LogicalDisk) } catch { return '[]' }
+  foreach ($d in $disks) {
+    if ($d.DriveType -ne 2 -and $d.DriveType -ne 3) { continue }
+    $id = [string]$d.DeviceID
+    if (-not $id) { continue }
+    $fmt = [string]$d.FileSystem
+    if (-not $fmt) { continue }
+    $isSys = ($id -eq $sys)
+    $root = $id + '\'
+    $current = $false
+    if ($kitRoot -and ($kitRoot -eq $root -or $kitRoot -eq $id)) { $current = $true }
+    if ($isSys -and -not $current) { continue }
+    $fat = ($fmt -match '^(?i)(FAT|FAT32)$')
+    $name = [string]$d.VolumeName
+    if (-not $name) { $name = $id }
+    $free = 0
+    if ($d.FreeSpace) { $free = [math]::Round(([double]$d.FreeSpace / 1000000000), 1) }
+    $freeText = $free.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+    $ext = 'true'; if ($isSys) { $ext = 'false' }
+    $cur = 'false'; if ($current) { $cur = 'true' }
+    $isFat = 'false'; if ($fat) { $isFat = 'true' }
+    $items += ('{"name":"' + (Escape-JsonText $name) + '","path":"' + (Escape-JsonText $root) + '","format":"' + (Escape-JsonText $fmt) + '","freeGB":' + $freeText + ',"fat32":' + $isFat + ',"current":' + $cur + ',"external":' + $ext + '}')
+  }
+  return '[' + ($items -join ',') + ']'
+}
+function Test-InstallPath([string]$Path) {
+  if (-not $Path) { return '' }
+  if ($Path -match '[&|<>^%]') { throw 'That folder path has a character the installer cannot use.' }
+  if ($Path -notmatch '^[A-Za-z]:\\') { throw 'Pick a folder on the drive.' }
+  if ($Path -match '\\\.\.(\\|$)') { throw 'Pick a folder on the drive.' }
+  return $Path
+}
 function Test-IdList($Value) {
   $items = @()
   if ($null -eq $Value) { return @() }
@@ -93,7 +130,7 @@ $url = "http://127.0.0.1:$port/"
 Write-Host "Guided installer is open in your web browser:"
 Write-Host "  $url"
 Write-Host 'Leave this window open. Closing it stops the installer.'
-Write-Host 'Nothing is downloaded until you press Install on the last screen.'
+Write-Host 'Nothing is erased until you press Erase, and nothing is downloaded until you press Install.'
 Start-Process $url
 
 while ($listener.IsListening) {
@@ -113,6 +150,16 @@ while ($listener.IsListening) {
       Send-File $res (Join-Path $Kit 'catalog\maps.txt') 'text/plain; charset=utf-8'
     } elseif ($req.HttpMethod -eq 'GET' -and $path -eq '/api/context') {
       Send-Response $res 200 'application/json; charset=utf-8' $contextJson
+    } elseif ($req.HttpMethod -eq 'GET' -and $path -eq '/api/drives') {
+      Send-Response $res 200 'application/json; charset=utf-8' (Get-InstallerDrives)
+    } elseif ($req.HttpMethod -eq 'GET' -and $path -eq '/api/disks') {
+      $diskJson = '[]'
+      try {
+        $prep = Join-Path $PSScriptRoot 'prepare-disk.ps1'
+        $diskJson = (& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $prep -List | Out-String).Trim()
+        if ($diskJson -notmatch '^\s*\[') { $diskJson = '[]' }
+      } catch { $diskJson = '[]' }
+      Send-Response $res 200 'application/json; charset=utf-8' $diskJson
     } elseif ($req.HttpMethod -eq 'GET' -and $path -eq '/api/log') {
       $running = $false
       $exitCode = $null
@@ -158,6 +205,11 @@ while ($listener.IsListening) {
       if ($models) { $lines[-1] += ' -Models ' + $models }
       $lines[-1] += ' -Tier ' + $tierChoice
       if ($wikiOn) { $lines[-1] += ' -WithWikipedia' } else { $lines[-1] += ' -SkipWikipedia' }
+      $dest = Test-InstallPath ([string]$data.path)
+      if ($dest) { $lines[-1] += ' -InstallPath ' + (Quote-Cmd $dest) }
+      $wikiNow = $false
+      if ($data.wikiNow -eq $true -or [string]$data.wikiNow -eq 'true') { $wikiNow = $true }
+      if ($wikiNow -and $wikiOn) { $lines[-1] += ' -WikiNow' }
       if ($extras.Count) { $lines[-1] += ' -ExtraLibraries ' + ($extras -join ',') }
       if ($maps.Count) { $lines[-1] += ' -Maps ' + ($maps -join ',') }
       if ($share) { $lines[-1] += ' -ShareWifi' } else { $lines[-1] += ' -NoShareWifi' }
@@ -167,6 +219,69 @@ while ($listener.IsListening) {
       Set-Content -LiteralPath $bat -Value $lines -Encoding ASCII
       $script:InstallProc = Start-Process -FilePath $bat -WorkingDirectory $Kit -PassThru -WindowStyle Minimized
       Send-Response $res 200 'application/json; charset=utf-8' '{"ok":true}'
+    } elseif ($req.HttpMethod -eq 'POST' -and $path -eq '/api/prepare') {
+      if ($script:InstallProc -and -not $script:InstallProc.HasExited) {
+        Send-Response $res 409 'text/plain; charset=utf-8' "An install or erase is already running.`n"
+        continue
+      }
+      $reader = New-Object System.IO.StreamReader($req.InputStream, $req.ContentEncoding)
+      $raw = $reader.ReadToEnd()
+      $reader.Close()
+      $data = $raw | ConvertFrom-Json
+      $confirmed = $false
+      if ($data.confirmed -eq $true -or [string]$data.confirmed -eq 'true') { $confirmed = $true }
+      if (-not $confirmed) { throw 'Tick the box before erasing.' }
+      $mode = [string]$data.mode
+      if ($mode -ne 'partition' -and $mode -ne 'disk') { throw 'Pick what to erase.' }
+      $diskId = [string]$data.disk
+      if ($diskId -notmatch '^\d+$') { throw 'Pick a disk.' }
+      if ($mode -eq 'partition') {
+        $partId = [string]$data.partitionId
+        if ($partId -notmatch "^$diskId`:\d+$") { throw 'That partition is not on this disk.' }
+      }
+      $sizeGB = 0.0
+      if ($data.sizeGB) { $sizeGB = [double]$data.sizeGB }
+      $modelsGB = 0.0
+      if ($data.modelsGB) { $modelsGB = [double]$data.modelsGB }
+      if ($mode -eq 'partition' -and $modelsGB -gt 0) { throw 'The Windows drive is only made when the whole disk is erased.' }
+      if ($mode -eq 'disk' -and $sizeGB -gt 0 -and $sizeGB -lt 200) { throw 'That size does not fit on this disk.' }
+      if ($mode -eq 'disk' -and $modelsGB -gt 0 -and $modelsGB -lt 200) { throw 'The Windows drive needs at least 200 GB.' }
+      if ($mode -eq 'disk' -and $modelsGB -gt 0 -and $data.diskSizeGB) {
+        $diskGB = [double]$data.diskSizeGB
+        $kitGB = $sizeGB
+        if ($kitGB -le 0) { $kitGB = $diskGB - $modelsGB }
+        if ($kitGB -lt 199) { throw 'The Windows drive does not leave 200 GB for the kit.' }
+      }
+      New-Item -ItemType Directory -Force -Path (Join-Path $Kit 'logs') | Out-Null
+      if (Test-Path -LiteralPath $script:LogFile) { Remove-Item -LiteralPath $script:LogFile -Force }
+      $reqFile = Join-Path $Kit 'logs\prepare-request.json'
+      [System.IO.File]::WriteAllText($reqFile, $raw)
+      $prep = Join-Path $PSScriptRoot 'prepare-disk.ps1'
+      $bat = Join-Path $Kit 'logs\install-run.bat'
+      $lines = @('@echo off')
+      $lines += 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File ' + (Quote-Cmd $prep) + ' -RequestFile ' + (Quote-Cmd $reqFile) + ' > ' + (Quote-Cmd $script:LogFile) + ' 2>&1'
+      $lines += 'exit /b %ERRORLEVEL%'
+      Set-Content -LiteralPath $bat -Value $lines -Encoding ASCII
+      $script:InstallProc = Start-Process -FilePath $bat -WorkingDirectory $Kit -PassThru -WindowStyle Minimized
+      Send-Response $res 200 'application/json; charset=utf-8' '{"ok":true}'
+    } elseif ($req.HttpMethod -eq 'POST' -and $path -eq '/api/drive-tools') {
+      $reader = New-Object System.IO.StreamReader($req.InputStream, $req.ContentEncoding)
+      $raw = $reader.ReadToEnd()
+      $reader.Close()
+      $data = $raw | ConvertFrom-Json
+      $action = [string]$data.action
+      $phrase = [string]$data.phrase
+      if ($action -eq 'erase' -and ($data.yes -eq $true -or [string]$data.yes -eq 'true')) { throw '--yes is not accepted for erase.' }
+      if ($action -eq 'library') {
+        $n = 0
+        if ($data.files) { $n = @($data.files).Count }
+        if ($phrase -ne ("DELETE {0} FILES" -f $n)) { throw 'Type the confirmation exactly.' }
+      } elseif ($action -eq 'kit') {
+        if ($phrase -ne 'REMOVE KIT FROM DRIVE') { throw 'Type the confirmation exactly.' }
+      } elseif ($action -eq 'erase') {
+        if ([string]$data.phrase -ne [string]$data.label -or [string]$data.erase -ne 'ERASE') { throw 'Type the confirmation exactly.' }
+      } else { throw 'Pick an action.' }
+      Send-Response $res 400 'text/plain; charset=utf-8' "Drive tools from this page need the phrase checked before anything starts. Run Click these, then 7 Drive tools.`n"
     } else {
       Send-Response $res 404 'text/plain; charset=utf-8' "Not found.`n"
     }

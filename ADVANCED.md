@@ -6,7 +6,7 @@ For people comfortable with a terminal. Normal users: open **`Click these`** (se
 
 | Version | Windows | Mac | Linux | What it does |
 |---|---|---|---|---|
-| **Guided** | `Click these/1 Install - guided/Windows.bat` | `Click these/1 Install - guided/Mac.command` | `bash "Click these/1 Install - guided/Linux.sh"` | Browser page on 127.0.0.1. Explains every choice, then runs the setup below with the answers filled in (`-Yes` / `--yes` plus the flags, including `-NoShareWifi` or `--no-share-wifi`, and `-ThisComputer` or `--this-computer`). Nothing downloads until Install is pressed. |
+| **Guided** | `Click these/1 Install - guided/Windows.bat` | `Click these/1 Install - guided/Mac.command` | `bash "Click these/1 Install - guided/Linux.sh"` | Browser page on 127.0.0.1. Explains every choice, then runs the setup below with the answers filled in (`-Yes` / `--yes` plus the flags, including `-NoShareWifi` or `--no-share-wifi`, and `-ThisComputer` or `--this-computer`). If you pick an external drive it also passes `-InstallPath` / `--path` and `-WikiNow` / `--wiki-now`, so Wikipedia finishes in that setup instead of in the background. Nothing downloads until Install is pressed. |
 | **Easy** | `EASY-INSTALL (Windows).bat` | `EASY-INSTALL (Mac).command` (Apple chip and Intel) | `bash "EASY-INSTALL (Linux).sh"` | No questions. Detects memory, graphics card and free disk space, picks a hardware profile, installs into the kit folder, adds an **Offline AI** shortcut to the Desktop, starts the kit and opens the browser. If the disk is short it drops to a smaller profile and/or skips Wikipedia instead of failing. Maps are not downloaded. |
 | **Setup Wizard** | `SETUP.bat` | `SETUP-MAC.command` | `bash SETUP-LINUX.sh` | Folder, then 8 steps: AI model size (suggested from the hardware), core library tier, full Wikipedia yes/no, Extra Libraries, Share on Wi-Fi, optional offline maps, this computer or all computers (universal drive), and a summary (download size vs free space, including the extra program space) with `Proceed? (Y/N)`. Nothing downloads before that. Choices are saved in `kit-settings.ini`. |
 | **Advanced** | `scripts\setup.ps1` with options | `mac/setup.sh` with options | `linux/setup.sh` (same wizard; sets `OFFLINE_AI_OS=linux`) | Everything below, plus `kit-settings.ini`. |
@@ -93,6 +93,7 @@ powershell -ExecutionPolicy Bypass -File scripts\setup.ps1 [options]
   -Maps id,id               also download these offline maps (ids or numbers from catalog\maps.txt, or "all")
   -Universal                also download programs for Windows, Mac (both chips) and Linux (x64 and ARM)
   -ThisComputer             this computer only (skips the "which computers" question)
+  -WikiNow                  download full Wikipedia during setup, before it says the drive is ready
 ```
 
 Any option given on the command line skips that wizard question. `-Easy` (and `-Yes`) never ask anything.
@@ -107,7 +108,7 @@ bash mac/setup.sh [options]
   --models lite|8|16|24|32   or  --models "qwen3.5:9b,llama3.2:3b"
   --zims id,id  --path /Volumes/SSD/OfflineAI  --skip-wikipedia  --with-wikipedia
   --use-system-ollama  --no-start  --yes  --test  --detect-only
-  --share-wifi  --no-share-wifi  --extra-libraries id,id|all  --maps id,id|all  --universal  --this-computer
+  --share-wifi  --no-share-wifi  --extra-libraries id,id|all  --maps id,id|all  --universal  --this-computer  --wiki-now
 ```
 
 Linux is the same wizard: `bash linux/setup.sh` (or `bash SETUP-LINUX.sh`). It downloads
@@ -263,9 +264,14 @@ Linux launchers work as `bash path/to/script` when exFAT strips `+x`. If a progr
 tree is copied to `~/Library/Caches/offline-ai-kit` or `~/.cache/offline-ai-kit`. Symlinks inside an unpacked
 `runtime/` tree are replaced with real copies. Downloads keep the computer awake.
 
-On macOS, `kiwix-serve` uses `mmap`. Apple's exFAT driver returns `Invalid argument` for a ZIM over 4 GB. START
-explains that when the library fails to come up and a served ZIM on an exFAT or FAT volume is over 4 GB. Windows
-and Linux open those files. Files under 4 GB still work. The kit does not move ZIMs into an APFS disk image.
+Library programs are pinned to a kiwix-tools build with libzim 9.6.0 or newer (`catalog/runtime-pins.txt`).
+That build opens a ZIM over 4 GB on exFAT, so the kit keeps one copy of every book. FAT32 is still refused for
+a file of 4 GB or more. The guided installer's **Prepare a drive for every computer** step formats the kit space
+as exFAT (it will not erase the startup disk). On a whole-disk erase it can also make `AI-DRIVE`, 3 TB unless
+another size is typed, for a Windows PC to store LLM models. The kit volume `OFFLINEAI` gets the rest. A Mac
+formats `AI-DRIVE` as exFAT because macOS cannot create NTFS. Windows formats it as NTFS. A book this computer
+cannot open is skipped. The other books still serve. Closing the installer window stops an erase or a download
+that is still running.
 
 ## Check for updates
 
@@ -290,7 +296,11 @@ anything), or "you appear to be offline". `OFFLINE_AI_RELEASES_API=<url>` points
 | `linux/` | Linux launchers. They set `OFFLINE_AI_OS=linux` and run the Mac bash scripts, which then pick Linux Kiwix/Ollama builds and `ip route` for the LAN address. |
 | `kit-config.json` / `kit-config-mac.txt` | what setup chose last time |
 
-Uninstall: run STOP, then delete the kit folder (and the Desktop shortcut). Nothing else is installed.
+Uninstall: open `Click these`, then `6 Uninstall` (or run `UNINSTALL-OFFLINE-AI-MAC.command`, `UNINSTALL-OFFLINE-AI-LINUX.sh`, or `UNINSTALL.bat`). It asks you to type YES, stops this copy, removes the Desktop shortcut if that shortcut starts this copy, and removes the small program cache on this computer when the kit made one (`~/Library/Caches/offline-ai-kit` on a Mac, `~/.cache/offline-ai-kit` on Linux). The drive is not changed. Deleting library files, the kit folder, or the kit partition is in `Click these`, then `7 Drive tools`. Before v1.6.0, Uninstall deleted the kit folder from the drive.
+
+`CHECK-DRIVE (Mac).command`, `CHECK-DRIVE (Linux).sh`, and `CHECK-DRIVE.bat` (also `Click these`, then `8 Check drive`) check the drive offline. `--quick` checks presence, size, and an open probe. `--full` also re-hashes `DRIVE-MANIFEST.json`.
+
+Scriptable checks include `node tests/v160.test.js` in addition to the older test files. Tests 2, 6, and 18, and a real 1 TB `RESULT: DRIVE READY` run, are manual.
 
 ## Ask the library: how it works
 

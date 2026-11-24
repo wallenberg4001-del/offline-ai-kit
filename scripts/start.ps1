@@ -1,5 +1,5 @@
 # Starts the Offline AI Kit: library (Kiwix), AI models (Ollama), chat page.
-# Also starts the full-Wikipedia background download if it is not finished yet.
+# Wikipedia is downloaded by setup. Start does not use the network.
 #   -ShareWifi / -NoShareWifi : turn Share on Wi-Fi on or off (remembered in kit-settings.ini)
 param([switch]$ShareWifi, [switch]$NoShareWifi)
 . (Join-Path $PSScriptRoot 'common.ps1')
@@ -57,15 +57,10 @@ elseif ($SkipWikipedia) {
     Write-Host '  Wikipedia is switched off. Everything else works.'
   }
 }
-elseif (Get-KitProcess 'wikipedia-download') { Write-Host '  Still downloading in its own window (look for it on the taskbar).' }
+elseif (Get-KitProcess 'wikipedia-download') { Write-Host '  A download is still running. Start did not begin a new one.' }
 else {
-  $ps = Join-Path $PSHOME 'powershell.exe'
-  if (-not (Test-Path -LiteralPath $ps)) { $ps = (Get-Process -Id $PID).Path }
-  $dl = Join-Path $PSScriptRoot 'wiki-download.ps1'
-  Start-Process -FilePath $ps -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',('"' + $dl + '"')) -WindowStyle Minimized | Out-Null
-  Write-Host ('  Not downloaded yet - started downloading it in the background (about {0}).' -f (Format-GB ($WikipediaGB * 1e9))) -ForegroundColor Yellow
-  Write-Host '  A minimised window on the taskbar shows progress. Everything else works meanwhile.'
-  Write-Host '  It resumes automatically if interrupted, and appears in the library when finished.'
+  Write-Host '  Missing. Run SETUP.bat with internet to add it.' -ForegroundColor Yellow
+  Write-Host '  Everything else works. Start does not download it.'
 }
 
 $chatUrl = "http://127.0.0.1:$ChatPort/chat.html"

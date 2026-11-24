@@ -4,7 +4,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const { execFileSync, spawn } = require("child_process");
+const { execFileSync, spawn, spawnSync } = require("child_process");
 const http = require("http");
 const W = require("../www/install-wizard.js");
 const F = require("../www/first-aid.js");
@@ -91,7 +91,10 @@ check("folder guide names the numbered folders", /1 Install - guided/.test(read(
   ["Click these/4 Stop/Linux.sh", "STOP-OFFLINE-AI-LINUX.sh"],
   ["Click these/5 Check status/Windows.bat", "STATUS.bat"],
   ["Click these/5 Check status/Mac.command", "STATUS-MAC.command"],
-  ["Click these/5 Check status/Linux.sh", "STATUS-LINUX.sh"]
+  ["Click these/5 Check status/Linux.sh", "STATUS-LINUX.sh"],
+  ["Click these/6 Uninstall/Windows.bat", "UNINSTALL.bat"],
+  ["Click these/6 Uninstall/Mac.command", "UNINSTALL-OFFLINE-AI-MAC.command"],
+  ["Click these/6 Uninstall/Linux.sh", "UNINSTALL-OFFLINE-AI-LINUX.sh"]
 ].forEach(function (pair) {
   check("launcher " + pair[0], exists(pair[0]) && read(pair[0]).indexOf(pair[1]) !== -1);
 });
@@ -100,7 +103,92 @@ check("folder guide names the numbered folders", /1 Install - guided/.test(read(
 });
 check("copy lists include the new folder", /Click these/.test(read("scripts/setup.ps1")) && /Click these/.test(read("mac/setup.sh")) && /FOLDER-GUIDE\.txt/.test(read("scripts/setup.ps1")));
 check("guided flags exist on both setups", /NoShareWifi/.test(read("scripts/setup.ps1")) && /ThisComputer/.test(read("scripts/setup.ps1")) && /--no-share-wifi/.test(read("mac/setup.sh")) && /--this-computer/.test(read("mac/setup.sh")));
-check("version is 1.4.0", read("VERSION").trim() === "1.4.0");
+check("version is 1.6.0", read("VERSION").trim() === "1.6.0");
+check("folder on a drive is Offline AI Kit", W.driveFolder("/Volumes/SSD") === "/Volumes/SSD/Offline AI Kit" && W.driveFolder("E:\\") === "E:\\Offline AI Kit");
+check("FAT32 cannot be a ready drive", W.usableDrive({ path: "F:\\", format: "FAT32", fat32: true }) === false && W.fat32Blocked({ format: "ExFAT", fat32: false }) === false);
+{
+  const ext = W.externalReady(win, { path: "/Volumes/SSD", format: "ExFAT", freeGB: 400, fat32: false, current: false });
+  check("external drive turns Wikipedia and the guides on", ext.wikipedia === true && ext.wikiNow === true && ext.tier === "2" && ext.path === "/Volumes/SSD/Offline AI Kit");
+  W.GUIDE_EXTRAS.forEach(function (id) { check(id + " is included on a new drive", ext.extras.indexOf(id) !== -1); });
+  check("exFAT suggests every computer", ext.universal === true && ext.suggestUniversal === true);
+  const extEst = W.estimate(Object.assign({}, win, { freeGB: 20 }), ext, extras, maps);
+  check("estimate uses the chosen drive's free space", extEst.tooBig === false && extEst.lines.some(function (l) { return l.label === "Folder" && l.value === ext.path; }), extEst);
+  const small = W.externalReady(win, { path: "E:\\", format: "NTFS", freeGB: 50, fat32: false, current: false });
+  check("a drive that cannot hold Wikipedia is too small", W.estimate(win, small, extras, maps).tooBig === true && small.path === "E:\\Offline AI Kit");
+  const kept = W.externalReady(Object.assign({}, win, { folder: "/Volumes/SSD/offline-ai-kit" }), { path: "/Volumes/SSD", format: "APFS", freeGB: 800, current: true });
+  check("keeping this drive uses the current folder", kept.path === "/Volumes/SSD/offline-ai-kit" && kept.universal === false);
+}
+check("foreground Wikipedia flag is in both setups", /--wiki-now/.test(read("mac/setup.sh")) && /WikiNow/.test(read("scripts/setup.ps1")) && /--wiki-now/.test(read("mac/install-gui.pl")) && /-WikiNow/.test(read("scripts/install-gui.ps1")));
+check("drive list script exists", exists("mac/list-drives.sh") && /api\/drives/.test(read("mac/install-gui.pl")) && /api\/drives/.test(read("scripts/install-gui.ps1")));
+{
+  const every = W.everyComputerChoices(win);
+  check("every computer choice downloads Wikipedia now", every.wikipedia === true && every.wikiNow === true && every.tier === "2" && every.universal === true && every.suggestUniversal === true && every.macImage === false && every.drawerReady === true);
+  W.GUIDE_EXTRAS.forEach(function (id) { check(id + " is included for every computer", every.extras.indexOf(id) !== -1); });
+  check("mac copy is not added", W.macCopyGB("mac", [{ gb: 4 }, { gb: 3.9 }]) === 0 && W.macCopyGB("windows", [{ gb: 127.4 }]) === 0);
+  const macCtx = Object.assign({}, win, { os: "mac" });
+  const macDrive = Object.assign({}, every, { driveFreeGB: 900, path: "/Volumes/OFFLINEAI/Offline AI Kit" });
+  const macEst = W.estimate(macCtx, macDrive, extras, maps);
+  check("estimate has one copy of the books", macEst.copyGB === 0 && macEst.lines.every(function (l) { return l.label !== "Mac copy"; }), macEst);
+  const winDrive = Object.assign({}, every, { driveFreeGB: 900, path: "E:\\Offline AI Kit" });
+  const winCopy = W.estimate(win, winDrive, extras, maps);
+  check("estimate does not add a second copy on Windows", winCopy.copyGB === 0 && winCopy.lines.every(function (l) { return l.label !== "Mac copy"; }), winCopy);
+  const disk = { id: "disk9", sizeGB: 1000, internal: false, startup: false, partitions: [{ id: "disk9s2", name: "ONE" }, { id: "disk9s3", name: "TWO" }] };
+  check("erase stays off until the box is ticked", W.prepareError(disk, { mode: "partition", partitionId: "disk9s2", confirmed: false }) !== "");
+  check("startup disk is rejected", W.prepareError({ id: "disk0", startup: true, sizeGB: 500, partitions: [] }, { mode: "disk", confirmed: true, sizeGB: 0 }) !== "");
+  check("internal disk is rejected", W.prepareError({ id: "disk1", internal: true, sizeGB: 500, partitions: [] }, { mode: "disk", confirmed: true, sizeGB: 0 }) !== "");
+  check("partition erase names only that partition", JSON.stringify(W.eraseNames(disk, { mode: "partition", partitionId: "disk9s2" })) === "[\"ONE\"]");
+  check("whole-disk erase names every partition", W.eraseNames(disk, { mode: "disk" }).join(",") === "ONE,TWO");
+  check("a size below 200 GB is rejected", W.prepareError(disk, { mode: "disk", confirmed: true, sizeGB: 100 }) !== "");
+  check("a size larger than the disk is rejected", W.prepareError(disk, { mode: "disk", confirmed: true, sizeGB: 5000 }) !== "");
+  check("a partition that is not on the disk is rejected", W.prepareError(disk, { mode: "partition", partitionId: "disk8s2", confirmed: true }) !== "");
+  const big = { id: "disk9", sizeGB: 4000, internal: false, startup: false, partitions: [{ id: "disk9s2", name: "ONE" }, { id: "disk9s3", name: "TWO" }] };
+  check("a 3 TB Windows drive leaves the rest for the kit", W.prepareError(big, { mode: "disk", confirmed: true, sizeGB: 0, modelsGB: 3000 }) === "");
+  check("a Windows drive must leave 200 GB for the kit", W.prepareError(disk, { mode: "disk", confirmed: true, sizeGB: 0, modelsGB: 3000 }) !== "");
+  check("a Windows drive is not made from one partition", W.prepareError(disk, { mode: "partition", partitionId: "disk9s2", confirmed: true, modelsGB: 3000 }) !== "");
+  check("a Windows drive below 200 GB is rejected", W.prepareError(big, { mode: "disk", confirmed: true, modelsGB: 100 }) !== "");
+}
+check("prepare scripts refuse the startup disk", /startup disk/.test(read("mac/prepare-disk.sh")) && /startup disk/.test(read("scripts/prepare-disk.ps1")) && /IsSystem/.test(read("scripts/prepare-disk.ps1")) && /BusType/.test(read("scripts/prepare-disk.ps1")));
+check("linux prepare does not offer a whole-disk erase", /not offered on Linux/.test(read("mac/prepare-disk.sh")));
+check("disk list endpoint exists", /api\/disks/.test(read("mac/install-gui.pl")) && /api\/disks/.test(read("scripts/install-gui.ps1")) && /api\/prepare/.test(read("mac/install-gui.pl")) && /api\/prepare/.test(read("scripts/install-gui.ps1")));
+check("mac copy is gone", !/prepare_mac_library_image/.test(read("mac/lib.sh")) && !/prepare_mac_library_image/.test(read("mac/setup.sh")) && /libzim 9\.6/.test(read("README.md")));
+{
+  const safe = spawnSync("bash", [path.join(root, "mac/prepare-disk.sh")], {
+    input: JSON.stringify({ confirmed: false, disk: "disk4", mode: "disk", diskSizeGB: 1000, sizeGB: 0 }),
+    encoding: "utf8",
+    timeout: 8000
+  });
+  const safeOut = (safe.stdout || "") + (safe.stderr || "");
+  check("unconfirmed prepare refuses before an erase", safe.status !== 0 && /Refused/.test(safeOut) && !/eraseVolume|partitionDisk|deleteContainer|mkfs/.test(safeOut), safeOut.slice(0, 300));
+  const missing = spawnSync("bash", [path.join(root, "mac/prepare-disk.sh")], {
+    input: JSON.stringify({ confirmed: true, mode: "partition", disk: "disk99", partitionId: "disk99s2", diskSizeGB: 10, sizeGB: 0 }),
+    encoding: "utf8",
+    timeout: 15000
+  });
+  const missingOut = (missing.stdout || "") + (missing.stderr || "");
+  check("a missing disk is refused", missing.status !== 0 && /Refused/.test(missingOut) && !/Started partitioning|Finished erase|Formatting/i.test(missingOut), missingOut.slice(0, 300));
+  const smallWindows = spawnSync("bash", [path.join(root, "mac/prepare-disk.sh")], {
+    input: JSON.stringify({ confirmed: true, mode: "disk", disk: "disk99", diskSizeGB: 4000, sizeGB: 0, modelsGB: 100 }),
+    encoding: "utf8",
+    timeout: 8000
+  });
+  const smallOut = (smallWindows.stdout || "") + (smallWindows.stderr || "");
+  check("a small Windows drive is refused before an erase", smallWindows.status !== 0 && /at least 200 GB/.test(smallOut) && !/partitionDisk|eraseVolume|mkfs/.test(smallOut), smallOut.slice(0, 300));
+}
+if (process.platform === "darwin") {
+  const info = execFileSync("diskutil", ["info", "/"], { encoding: "utf8" });
+  const whole = ((info.match(/Part of Whole:\s+(\S+)/) || [])[1] || "");
+  const phys = ((info.match(/Physical Store:\s+(\S+)/) || [])[1] || "").replace(/s\d.*$/, "");
+  const listed = execFileSync("bash", [path.join(root, "mac/list-disks.sh")], { encoding: "utf8", timeout: 60000 });
+  const liveDisks = JSON.parse(listed);
+  check("list-disks prints a JSON array", Array.isArray(liveDisks));
+  check("list-disks omits the startup disk", !liveDisks.some(function (d) { return d.id === whole || d.id === phys || d.startup === true || d.internal === true; }), liveDisks.map(function (d) { return d.id; }));
+  liveDisks.forEach(function (d) {
+    check(d.id + " is an external disk id", /^disk\d+$/.test(d.id) && typeof d.sizeGB === "number");
+    (d.partitions || []).forEach(function (p) {
+      check(p.id + " stays on its disk", p.id.indexOf(d.id + "s") === 0 && !/^EFI$/i.test(p.name));
+    });
+  });
+}
 
 const ctxText = execFileSync("bash", [path.join(root, "mac/wizard-context.sh")], { encoding: "utf8" });
 const ctx = JSON.parse(ctxText);
@@ -115,6 +203,36 @@ function get(port, urlPath) {
       res.on("end", function () { resolve({ status: res.statusCode, body: body }); });
     }).on("error", reject);
   });
+}
+function post(port, urlPath, obj) {
+  const body = JSON.stringify(obj);
+  return new Promise(function (resolve, reject) {
+    const req = http.request({
+      host: "127.0.0.1", port: port, path: urlPath, method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) }
+    }, function (res) {
+      let data = "";
+      res.setEncoding("utf8");
+      res.on("data", function (c) { data += c; });
+      res.on("end", function () { resolve({ status: res.statusCode, body: data }); });
+    });
+    req.on("error", reject);
+    req.write(body);
+    req.end();
+  });
+}
+function waitForPrepareLog(port) {
+  const started = Date.now();
+  function once() {
+    return get(port, "/api/log").then(function (res) {
+      let data = {};
+      try { data = JSON.parse(res.body); } catch (e) { data = { text: res.body || "" }; }
+      if (typeof data.exit === "number") return data;
+      if (Date.now() - started > 20000) return data;
+      return new Promise(function (resolve) { setTimeout(resolve, 250); }).then(once);
+    });
+  }
+  return once();
 }
 
 const child = spawn("perl", [path.join(root, "mac/install-gui.pl")], {
@@ -137,9 +255,34 @@ started.then(function (port) {
   return get(port, "/api/context").then(function (res) {
     const live = JSON.parse(res.body);
     check("installer page serves context", res.status === 200 && live.folder && live.os, live);
+    return get(port, "/api/drives");
+  }).then(function (res) {
+    const drives = JSON.parse(res.body);
+    check("installer lists drives", res.status === 200 && Array.isArray(drives), res.body.slice(0, 240));
+    check("drive list includes this copy", drives.some(function (d) { return d.current === true && d.path && typeof d.freeGB === "number" && typeof d.fat32 === "boolean"; }), drives);
+    return get(port, "/api/disks");
+  }).then(function (res) {
+    const disks = JSON.parse(res.body);
+    check("installer lists disks", res.status === 200 && Array.isArray(disks), res.body.slice(0, 240));
+    return post(port, "/api/prepare", { confirmed: false, disk: "disk99", mode: "disk", diskSizeGB: 1 });
+  }).then(function (res) {
+    check("installer refuses an erase that is not confirmed", res.status === 400 && /Tick|eras/i.test(res.body), res.status + " " + res.body.slice(0, 200));
+    return post(port, "/api/prepare", { confirmed: true, mode: "partition", disk: "disk99", partitionId: "disk99s2", diskSizeGB: 10, sizeGB: 0 });
+  }).then(function (res) {
+    check("installer starts prepare for a missing disk", res.status === 200 && /"ok":true/.test(res.body), res.status + " " + res.body.slice(0, 200));
+    if (res.status !== 200) return null;
+    return waitForPrepareLog(port);
+  }).then(function (log) {
+    if (log) {
+      const text = log.text || "";
+      check("prepare log shows the refusal", log.exit === 1 && text.trim().length > 0 && /Refused:/.test(text) && !/eraseVolume|partitionDisk|deleteContainer|mkfs/.test(text), JSON.stringify(log).slice(0, 400));
+    }
     return get(port, "/install-wizard.js");
   }).then(function (res) {
     check("installer page serves the script", res.status === 200 && /function estimate/.test(res.body));
+    return post(port, "/api/drive-tools", { action: "library", phrase: "WRONG PHRASE", files: ["not-a-real-book.zim"] });
+  }).then(function (res) {
+    check("drive tools rejects a wrong phrase", res.status === 400 && /confirmation/.test(res.body), res.status + " " + res.body.slice(0, 200));
     return get(port, "/nope");
   }).then(function (res) {
     check("unknown installer path is 404", res.status === 404, res.status);

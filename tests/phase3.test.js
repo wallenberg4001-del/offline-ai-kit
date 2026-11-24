@@ -108,7 +108,7 @@ const wwwBad = ["maps.html", "maps.js", "maps-index.js"].filter(function (f) {
 check("maps pages have no external URLs", wwwBad.length === 0, wwwBad);
 
 ["EASY-INSTALL (Linux).sh", "SETUP-LINUX.sh", "START-OFFLINE-AI-LINUX.sh", "STOP-OFFLINE-AI-LINUX.sh", "STATUS-LINUX.sh",
- "linux/lib.sh", "linux/setup.sh", "linux/start.sh", "linux/stop.sh", "linux/status.sh", "linux/add-maps.sh"].forEach(function (f) {
+ "linux/lib.sh", "linux/setup.sh", "linux/start.sh", "linux/stop.sh", "linux/status.sh", "linux/add-maps.sh", "linux/uninstall.sh"].forEach(function (f) {
   check("exists " + f, exists(f));
 });
 const linuxBlob = ["linux/lib.sh", "linux/setup.sh", "linux/start.sh", "mac/lib.sh"].map(read).join("\n");
@@ -124,9 +124,9 @@ check("share exposes only the chat port variable", /bind = 'any'/.test(read("scr
 check("resolver accepts a letter suffix in PowerShell", /\\d\{4\}-\\d\{2\}\[a-z\]\?/.test(read("scripts/common.ps1")));
 check("resolver accepts a letter suffix in bash", /\[0-9\]\{4\}-\[0-9\]\{2\}\[a-z\]\?/.test(read("mac/lib.sh")));
 check("FAT32 names are refused in both libraries", /fat32/.test(read("scripts/common.ps1")) && /vfat/.test(read("scripts/common.ps1")) && /msdos/.test(read("scripts/common.ps1")) && /fat32\|vfat\|msdos/.test(read("mac/lib.sh")));
-check("exFAT mmap limit is explained for macOS", /mmap/.test(read("mac/lib.sh")) && /4 GB/.test(read("README.md")) && /exFAT/.test(read("START-HERE.txt")));
+check("large books use libzim 9.6 and FAT32 stays at 4 GB", /libzim 9\.6/.test(read("README.md")) && /4 GB/.test(read("README.md")) && /exFAT/.test(read("START-HERE.txt")) && !/prepare_mac_library_image/.test(read("mac/lib.sh")));
 check("USB section is in the README and START-HERE", /Running from a USB drive/.test(read("README.md")) && /RUNNING FROM A USB DRIVE/.test(read("START-HERE.txt")));
-check("version is 1.4.0", read("VERSION").trim() === "1.4.0" && /"1\.4\.0"/.test(read("www/version.js")));
+check("version is 1.6.0", read("VERSION").trim() === "1.6.0" && /"1\.6\.0"/.test(read("www/version.js")));
 
 const vm = require("vm");
 const html = read("www/maps.html");

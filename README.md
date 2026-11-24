@@ -17,10 +17,13 @@ Open the folder **`Click these`**. The numbered folders are the whole kit, in th
 | **3 Start** | Opens the chat and the library. Use this after it is installed. |
 | **4 Stop** | Turns it off. |
 | **5 Check status** | Phones on Wi-Fi, extra libraries, maps, and updates. |
+| **6 Uninstall** | Removes it from this computer. The drive is not changed. It asks you to type YES. |
+| **7 Drive tools (advanced)** | Deletes chosen files from the drive, or erases the kit partition. Not part of Uninstall. |
+| **8 Check drive** | Checks the files on the drive. Nothing is downloaded. |
 
 `FOLDER-GUIDE.txt` says what every other folder is, and which ones not to delete. Pick the file inside the folder that matches your computer (Windows, Mac, or Linux).
 
-The files at the top of the kit (`EASY-INSTALL`, `SETUP`, `START-OFFLINE-AI`, `STOP`, `STATUS`) do the same jobs. They stay so older notes and the Desktop shortcut still work.
+The files at the top of the kit (`EASY-INSTALL`, `SETUP`, `START-OFFLINE-AI`, `STOP`, `STATUS`, `UNINSTALL`) do the same jobs. They stay so older notes and the Desktop shortcut still work.
 
 ## 👉 Which one do I need?
 
@@ -41,7 +44,7 @@ There is **one file to double-click** if you do not want to open `Click these`. 
 | ⚡ **No questions** – just set it up with good choices for my computer | **`EASY-INSTALL (Windows).bat`** | **`EASY-INSTALL (Mac).command`** | **`EASY-INSTALL (Linux).sh`** |
 | ⌨️ **The same choices, in a text window** | **`SETUP.bat`** | **`SETUP-MAC.command`** | **`SETUP-LINUX.sh`** |
 
-**The guided installer** asks the same questions as the text Setup Wizard, one screen at a time, with a short explanation and a suggestion for your computer. Nothing downloads until you press **Install**.
+**The guided installer** asks the same questions as the text Setup Wizard, one screen at a time, with a short explanation and a suggestion for your computer. Nothing downloads until you press **Install**. It also asks whether to put the kit on an external hard drive. If you do, plug the drive in, pick it, and leave it plugged in. Wikipedia and the guides download onto that drive before the page says it is ready, so you can unplug it and keep it for later.
 
 **EASY-INSTALL** picks the AI size for your computer, includes full Wikipedia (if there's room), leaves
 "Share on Wi-Fi" **off**, adds no extra libraries and downloads **no maps**. You can change all of that later with **STATUS**.
@@ -73,7 +76,7 @@ it is a PC. Use the Windows file.
 ## How to get it
 
 1. **Download the kit:** go to the **[latest release](https://github.com/wallenberg4001-del/offline-ai-kit/releases/latest)**
-   and click **`Offline-AI-Kit-x.y.z.zip`** under **Assets** (for example `Offline-AI-Kit-1.4.0.zip`).
+   and click **`Offline-AI-Kit-x.y.z.zip`** under **Assets** (for example `Offline-AI-Kit-1.5.0.zip`).
    *(Or, on this page, click the green **Code** button, then **Download ZIP**. That works too.)*
 2. **Unzip it.**
    - **Windows:** right-click the ZIP, choose **Properties**, tick **Unblock**, click **OK**.
@@ -113,7 +116,9 @@ it is a PC. Use the Windows file.
 | Strong computers (FULL / LARGE) | Recommended (~11 GB) | 7 models | ~47–50 GB | ~190 GB |
 | Big Macs, 32 GB+ (LARGEST) | Recommended (~11 GB) | 8 models | ~66 GB | ~205 GB |
 
-An external drive (USB SSD) is fine. Copy the unzipped folder onto it first, then double-click from there.
+An external drive (USB SSD) is fine. The guided installer can put the kit there for you: plug the drive in, choose it, and leave it plugged in until the page says the drive is ready. Wikipedia and the guides are on the drive before you unplug it.
+
+**Prepare a drive for every computer** erases only the partition you confirm, or the whole disk if you choose that, then formats the kit space as exFAT and names it OFFLINEAI. Windows, Mac, and Linux can all read that. If you erase the whole disk, you can also make a second partition named AI-DRIVE. It starts at 3 TB, and you can type another size. A Windows PC stores LLM models there. The kit uses the rest of the disk. On a Mac, AI-DRIVE is exFAT, which Windows reads and writes. On a Windows PC, AI-DRIVE is NTFS. It will not erase the startup disk. Wikipedia and the guides finish downloading before the page says the drive is ready. One copy of every book is stored. Library programs need libzim 9.6.0 or newer, which opens the large books on exFAT. There is no second Mac copy.
 
 ---
 
@@ -248,8 +253,7 @@ unless you turn on [Share on Wi-Fi](#-use-it-on-phones-and-tablets-share-on-wi-f
 
 **Can my family use it on their phones?** Yes – turn on [Share on Wi-Fi](#-use-it-on-phones-and-tablets-share-on-wi-fi) and scan the QR code on the chat page. Home Wi-Fi only.
 
-**How long does setup take?** Usually 1–3 hours for the main part (depends on your internet), then Wikipedia keeps
-downloading in the background – from about an hour to a day or two. Everything else works meanwhile.
+**How long does setup take?** Usually 1–3 hours for the main part (depends on your internet). Full Wikipedia is part of setup and can take many more hours. Start does not download it.
 
 **I have an older Intel Mac. Will it work?** Yes, with macOS 13 (Ventura) or newer. The AI runs on the Mac's processor,
 so answers are slower – often 10 to 60 seconds. The library is just as fast as on any other computer.
@@ -257,8 +261,9 @@ On macOS 12 (Monterey) you get the library only. Older than macOS 12 is not supp
 
 **Which file do I double-click on a Mac?** Always `EASY-INSTALL (Mac).command`. It works on Apple-chip and Intel Macs.
 
-**Will it slow down or change my computer?** No. Nothing is installed into Windows or macOS; it all lives in one folder.
-It only uses the computer while it's running, and STOP turns it off. To remove it, delete the folder.
+**Will it slow down or change my computer?** No. The kit lives in one folder.
+It only uses the computer while it's running, and Stop turns it off. On a drive that cannot run programs, a small copy of those programs is kept in this computer's cache.
+To remove it from this computer, open **Click these**, then **6 Uninstall**, and type YES. That removes the Desktop shortcut if it starts this copy, and the small cache on this computer. The drive is not changed. Deleting library files or the kit folder is in **7 Drive tools**. Before v1.6.0, Uninstall deleted the kit folder from the drive.
 
 **Is the AI always right?** No – it can make mistakes. For medical or safety questions, also check the library, and call
 emergency services when you can. The kit is a helper, not a doctor.

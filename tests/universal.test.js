@@ -159,7 +159,7 @@ check("chat port is not Mac-only", !/Mac only with Share on Wi-Fi/.test(advanced
 check("readme extra space matches", /11\.5 GB more on Windows, about 13 GB more on Mac and Linux/.test(read("README.md")));
 check("outage card uses the chat url", /http:\/\/127\.0\.0\.1:8091\/chat\.html/.test(read("README-OUTAGE.txt")) && !/chat\.html file/.test(read("README-OUTAGE.txt")));
 
-check("version is 1.4.0", read("VERSION").trim() === "1.4.0" && /"1\.4\.0"/.test(read("www/version.js")));
+check("version is 1.6.0", read("VERSION").trim() === "1.6.0" && /"1\.6\.0"/.test(read("www/version.js")));
 
 if (fails) { console.log(fails + " failed"); process.exit(1); }
 console.log("all universal checks passed");
